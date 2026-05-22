@@ -28,8 +28,8 @@ const ecommerceRoutes = require('./src/routes/ecommerceRoutes');
 const allowedOrigins = [
   "http://localhost:8080",
   "http://localhost:3000",
-  "https://neoled-bolivia.netlify.app",
-  "https://neoledback-v5c6.onrender.com",
+  "https://lumyra-farmacia.netlify.app",
+  "https://farmmedicus-back.onrender.com",
 ];
 
 // Opciones de configuración CORS
