@@ -72,6 +72,7 @@ const ventasService = {
           v.descripcion,
           v.sub_total,
           v.descuento,
+          v.descripcion_descuento,
           v.total,
           v.metodo_pago,
           u.nombres as usuario_nombre,
