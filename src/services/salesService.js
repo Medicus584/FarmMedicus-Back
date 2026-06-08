@@ -121,8 +121,8 @@ const processSale = async (saleData, userId) => {
     }
 
     const saleResult = await client.query(
-      `INSERT INTO ventas (fecha_hora, idusuario, descripcion, sub_total, descuento, total, metodo_pago) 
-       VALUES (TIMEZONE('America/La_Paz', NOW()), $1, $2, $3, $4, $5, $6) 
+      `INSERT INTO ventas (fecha_hora, idusuario, descripcion, sub_total, descuento, total, metodo_pago, descripcion_descuento) 
+       VALUES (TIMEZONE('America/La_Paz', NOW()), $1, $2, $3, $4, $5, $6, $7) 
        RETURNING idventa`,
       [
         userId,
@@ -131,6 +131,7 @@ const processSale = async (saleData, userId) => {
         saleData.descuento,
         saleData.total,
         saleData.metodo_pago,
+        saleData.descripcion_descuento,
       ],
     );
 
