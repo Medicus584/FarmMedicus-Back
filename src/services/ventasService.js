@@ -59,10 +59,17 @@ const ventasService = {
         whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = CURRENT_DATE`);
       }
 
-      const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+      // Filtro por médico
+      if (filtros.medico && filtros.medico !== "Todos") {
+        paramCount++;
+        whereConditions.push(`m.nombre_doctor = $${paramCount}`);
+        queryParams.push(filtros.medico);
+      }
 
-      console.log("Query conditions:", whereConditions);
-      console.log("Query params:", queryParams);
+      const whereClause =
+        whereConditions.length > 0
+          ? `WHERE ${whereConditions.join(" AND ")}`
+          : "";
 
       const ventasQuery = `
         SELECT 
@@ -77,24 +84,44 @@ const ventasService = {
           v.metodo_pago,
           u.nombres as usuario_nombre,
           u.apellidos as usuario_apellidos,
-          u.usuario as usuario_usuario
+          u.usuario as usuario_usuario,
+          m.iddoctor,
+          m.nombre_doctor AS medico
         FROM ventas v
         INNER JOIN usuarios u ON v.idusuario = u.idusuario
+        LEFT JOIN detalle_ventas dv_medico
+          ON dv_medico.idventa = v.idventa
+        LEFT JOIN doctores m
+          ON dv_medico.iddoctor = m.iddoctor
         ${whereClause}
+        GROUP BY
+          v.idventa,
+          v.fecha_hora,
+          v.idusuario,
+          v.descripcion,
+          v.sub_total,
+          v.descuento,
+          v.descripcion_descuento,
+          v.total,
+          v.metodo_pago,
+          u.nombres,
+          u.apellidos,
+          u.usuario,
+          m.iddoctor,
+          m.nombre_doctor
         ORDER BY v.fecha_hora DESC
       `;
 
       const ventasResult = await query(ventasQuery, queryParams);
       const ventas = ventasResult.rows;
 
-      console.log(`Ventas encontradas: ${ventas.length}`);
-
-      // Obtener detalles para cada venta
-      for (let venta of ventas) {
+      // Obtener detalles
+      for (const venta of ventas) {
         const detallesQuery = `
           SELECT 
             dv.iddetalle_venta,
             dv.idproducto,
+            dv.iddoctor,
             dv.cantidad,
             dv.precio_unitario,
             dv.subtotal_linea,
@@ -157,13 +184,54 @@ const ventasService = {
         whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = CURRENT_DATE`);
       }
 
-      const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+      // Filtro por médico
+      if (filtros.medico && filtros.medico !== "Todos") {
+        paramCount++;
+        whereConditions.push(`
+          EXISTS (
+            SELECT 1
+            FROM detalle_ventas dv
+            INNER JOIN doctores m
+              ON dv.iddoctor = m.iddoctor
+            WHERE dv.idventa = v.idventa
+              AND m.nombre_doctor = $${paramCount}
+          )
+        `);
+
+        queryParams.push(filtros.medico);
+      }
+
+      const whereClause =
+        whereConditions.length > 0
+          ? `WHERE ${whereConditions.join(" AND ")}`
+          : "";
 
       const totalesQuery = `
         SELECT 
           COALESCE(SUM(v.total), 0) as total_general,
-          COALESCE(SUM(CASE WHEN v.metodo_pago = 'Efectivo' THEN v.total ELSE 0 END), 0) as total_efectivo,
-          COALESCE(SUM(CASE WHEN v.metodo_pago = 'QR' THEN v.total ELSE 0 END), 0) as total_qr
+
+          COALESCE(
+            SUM(
+              CASE 
+                WHEN v.metodo_pago = 'Efectivo' 
+                THEN v.total 
+                ELSE 0 
+              END
+            ),
+            0
+          ) AS total_efectivo,
+
+          COALESCE(
+            SUM(
+              CASE 
+                WHEN v.metodo_pago = 'QR' 
+                THEN v.total 
+                ELSE 0 
+              END
+            ),
+            0
+          ) AS total_qr
+
         FROM ventas v
         INNER JOIN usuarios u ON v.idusuario = u.idusuario
         ${whereClause}

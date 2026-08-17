@@ -13,14 +13,15 @@ const ventasController = {
 
   getVentas: async (req, res) => {
     try {
-      const { empleado, metodo, fechaEspecifica, fechaInicio, fechaFin } = req.query;
+      const { empleado, metodo, fechaEspecifica, fechaInicio, fechaFin, medico } = req.query;
       
       const ventas = await ventasService.getVentas({
         empleado,
         metodo,
         fechaEspecifica,
         fechaInicio,
-        fechaFin
+        fechaFin,
+        medico,
       });
       
       res.json(ventas);
@@ -32,14 +33,15 @@ const ventasController = {
 
   getTotalesVentas: async (req, res) => {
     try {
-      const { empleado, metodo, fechaEspecifica, fechaInicio, fechaFin } = req.query;
+      const { empleado, metodo, fechaEspecifica, fechaInicio, fechaFin, medico } = req.query;
       
       const totales = await ventasService.getTotalesVentas({
         empleado,
         metodo,
         fechaEspecifica,
         fechaInicio,
-        fechaFin
+        fechaFin,
+        medico,
       });
       
       res.json(totales);
