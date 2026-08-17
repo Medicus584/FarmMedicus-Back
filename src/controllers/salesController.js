@@ -1,20 +1,5 @@
 const salesService = require("../services/salesService");
 
-const searchProducts = async (req, res) => {
-  try {
-    const { q, withoutStock } = req.query;
-
-    const withoutStockParam =
-      withoutStock !== undefined ? withoutStock === "true" : true;
-
-    const products = await salesService.searchProducts(q, withoutStockParam);
-    res.json(products);
-  } catch (error) {
-    console.error("Error in searchProducts:", error);
-    res.status(500).json({ error: error.message });
-  }
-};
-
 const getCashStatus = async (req, res) => {
   try {
     const cashStatus = await salesService.getCurrentCashStatus();
@@ -43,8 +28,57 @@ const processSale = async (req, res) => {
   }
 };
 
+const getDoctores = async (req, res) => {
+  try {
+    const doctores = await salesService.getDoctores();
+    res.json(doctores);
+  } catch (error) {
+    console.error("Error obteniendo doctores:", error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+const createDoctor = async (req, res) => {
+  try {
+    const { nombre } = req.body;
+
+    const doctor = await salesService.createDoctor(nombre);
+    res.status(201).json(doctor);
+  } catch (error) {
+    console.error("Error creando doctor:", error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+const updateDoctor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre } = req.body;
+
+    const doctor = await salesService.updateDoctor(nombre, id);
+    res.json(doctor);
+  } catch (error) {
+    console.error("Error actualizando doctor:", error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+const deleteDoctor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const doctor = await salesService.deleteDoctor(id);
+    res.status(204).send();
+  } catch (error) {
+    console.error("Error obteniendo doctores:", error);
+    res.status(500).json({ error: error.message });
+  }
+}
+
 module.exports = {
-  searchProducts,
   getCashStatus,
   processSale,
+  getDoctores,
+  createDoctor,
+  updateDoctor,
+  deleteDoctor,
 };

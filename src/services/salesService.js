@@ -1,53 +1,5 @@
 const { query, pool } = require("../../db");
 
-const searchProducts = async (searchQuery, withoutStock = true) => {
-  if (!searchQuery || searchQuery.trim() === "") {
-    return [];
-  }
-
-  // Consulta principal con productos similares
-  const productsSql = `
-    SELECT 
-      p.idproducto,
-      p.nombre,
-      p.descripcion,
-      p.estado,
-      p.idubicacion,
-      u.nombre as nombre_ubicacion,
-      p.imagen,
-      p.precio_venta,
-      p.stock,
-      COALESCE(
-        (SELECT json_agg(
-          json_build_object(
-            'idproducto', ps.idproducto_similar,
-            'nombre', ps2.nombre
-          )
-        )
-        FROM productos_similares ps
-        JOIN productos ps2 ON ps.idproducto_similar = ps2.idproducto
-        WHERE ps.idproducto = p.idproducto AND ps2.estado = 0
-        ), '[]'::json
-      ) as productos_similares
-    FROM productos p
-    LEFT JOIN ubicaciones u ON p.idubicacion = u.idubicacion
-    WHERE p.estado = 0 
-      AND (p.nombre ILIKE $1 OR p.descripcion ILIKE $1 OR p.codigo_barras ILIKE $1)
-      ${withoutStock ? "AND p.stock > 0" : ""}
-    ORDER BY p.nombre
-    LIMIT 10;
-  `;
-
-  const searchTerm = `%${searchQuery}%`;
-  try {
-    const productsResult = await query(productsSql, [searchTerm]);
-    return productsResult.rows;
-  } catch (error) {
-    console.error("Error in searchProducts SQL query:", error);
-    throw error;
-  }
-};
-
 const getCurrentCashStatus = async () => {
   const sql = `
     SELECT ec.*, u.usuario
@@ -198,8 +150,63 @@ const processSale = async (saleData, userId) => {
   }
 };
 
+const getDoctores = async () => {
+  try {
+    const result = await query(
+      "SELECT iddoctor as id, nombre_doctor as nombre FROM doctores WHERE estado = 0 ORDER BY nombre_doctor",
+    );
+    return result.rows;
+  } catch (error) {
+    throw error;
+  }
+}
+
+const createDoctor = async (nombre) => {
+  try {
+    const result = await query(
+      "INSERT INTO doctores (nombre_doctor) VALUES ($1) RETURNING iddoctor as id, nombre_doctor as nombre",
+      [nombre]
+    );
+    return result.rows[0];
+  } catch (error) {
+    throw error;
+  }
+}
+
+const updateDoctor = async (nombre, id) => {
+  try {
+    const result = await query(
+      "UPDATE doctores SET nombre_doctor = $1 WHERE iddoctor = $2 RETURNING iddoctor as id, nombre_doctor as nombre",
+      [nombre, id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error("Doctor no encontrado");
+    }
+    return result.rows[0];
+  } catch (error) {
+    throw error;
+  }
+}
+
+const deleteDoctor = async (id) => {
+  try {
+    const result = await query(
+      "UPDATE doctores SET estado = 1 WHERE iddoctor = $1 RETURNING iddoctor as id, nombre_doctor as nombre",
+      [id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error("Doctor no encontrado");
+    }
+  } catch (error) {
+    throw error;
+  }
+}
+
 module.exports = {
-  searchProducts,
   getCurrentCashStatus,
   processSale,
+  getDoctores,
+  createDoctor,
+  updateDoctor,
+  deleteDoctor,
 };
