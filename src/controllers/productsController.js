@@ -171,13 +171,13 @@ const productsController = {
       const { id } = req.params;
       const { cantidad, idlote } = req.body;
       if (cantidad <= 0)
-        res.status(400).json({ error: "el stock no puede ser 0 o menor"});
+        return res.status(400).json({ error: "el stock no puede ser 0 o menor"});
       const producto = await productsService.updateStockProducto(
         parseInt(id),
         cantidad,
         idlote,
       );
-      res.json(producto);
+      return res.json(producto);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -196,7 +196,7 @@ const productsController = {
       fechaVencimientoDate.setHours(0, 0, 0, 0);
       
       if (fechaVencimientoDate < fechaActual) {
-        res.status(400).json({ error: "La fecha de vencimiento no puede ser anterior a la fecha actual"})
+        return res.status(400).json({ error: "La fecha de vencimiento no puede ser anterior a la fecha actual"})
       }
 
       const producto = await productsService.addStockProducto(
@@ -204,7 +204,7 @@ const productsController = {
         cantidad,
         fecha_vencimiento,
       );
-      res.json(producto);
+      return res.json(producto);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
