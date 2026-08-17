@@ -91,13 +91,14 @@ const productsController = {
         nombre: req.body.nombre,
         descripcion: req.body.descripcion,
         idubicacion: parseInt(req.body.idubicacion),
+        idlaboratorio: parseInt(req.body.idlaboratorio),
         categorias: JSON.parse(req.body.categorias || "[]"),
         precio_compra: parseFloat(req.body.precio_compra || 0),
         precio_venta: parseFloat(req.body.precio_venta || 0),
-        stock: parseInt(req.body.stock || 0),
         stock_minimo: parseInt(req.body.stock_minimo || 0),
         codigo_barras: req.body.codigo_barras || null,
         productos_similares: JSON.parse(req.body.productos_similares || "[]"),
+        lotes: JSON.parse(req.body.lotes || "[]"),
       };
 
       let imagenFile = null;
@@ -126,13 +127,14 @@ const productsController = {
         nombre: req.body.nombre,
         descripcion: req.body.descripcion,
         idubicacion: parseInt(req.body.idubicacion),
+        idlaboratorio: parseInt(req.body.idlaboratorio),
         categorias: JSON.parse(req.body.categorias || "[]"),
         precio_compra: parseFloat(req.body.precio_compra || 0),
         precio_venta: parseFloat(req.body.precio_venta || 0),
-        stock: parseInt(req.body.stock || 0),
         stock_minimo: parseInt(req.body.stock_minimo || 0),
         codigo_barras: req.body.codigo_barras || null,
         productos_similares: JSON.parse(req.body.productos_similares || "[]"),
+        lotes: JSON.parse(req.body.lotes || "[]"),
       };
 
       let imagenFile = null;

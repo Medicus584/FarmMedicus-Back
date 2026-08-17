@@ -539,7 +539,7 @@ const productsService = {
       const productoResult = await client.query(
         `INSERT INTO productos (
           nombre, descripcion, idubicacion, imagen, 
-          precio_compra, precio_venta, stock, stock_minimo, codigo_barras, estado
+          precio_compra, precio_venta, idlaboratorio, stock_minimo, codigo_barras, estado
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0) RETURNING *`,
         [
           productoData.nombre,
@@ -548,7 +548,7 @@ const productsService = {
           imagenBuffer,
           productoData.precio_compra,
           productoData.precio_venta,
-          productoData.stock,
+          productoData.idlaboratorio,
           productoData.stock_minimo || 0,
           productoData.codigo_barras || null,
         ],
@@ -563,6 +563,47 @@ const productsService = {
             [producto.idproducto, idcategoria],
           );
         }
+      }
+
+      if (productoData.lotes && productoData.lotes.length > 0) {
+        const lotesInvalidos = productoData.lotes.some(
+          (lote) =>
+            lote.fecha_vencimiento &&
+            new Date(lote.fecha_vencimiento).toISOString().split("T")[0] < new Date().toISOString().split("T")[0]
+        );
+
+        if (lotesInvalidos) {
+          throw new Error(
+            "Uno o más lotes tienen una fecha de vencimiento anterior a la fecha actual"
+          );
+        }
+
+        const valores = productoData.lotes
+          .map(
+            (_, index) =>
+              `($1, $${index * 2 + 2}, $${index * 2 + 3})`
+          )
+          .join(", ");
+
+        const params = [
+          producto.idproducto,
+          ...productoData.lotes.flatMap((lote) => [
+            lote.stock,
+            lote.fecha_vencimiento || null,
+          ]),
+        ];
+
+        await client.query(
+          `
+            INSERT INTO lotes (
+              idproducto,
+              stock,
+              fecha_vencimiento
+            )
+            VALUES ${valores}
+          `,
+          params
+        );
       }
 
       // Crear relaciones transitivas completas
@@ -623,9 +664,9 @@ const productsService = {
           idubicacion = $3,
           precio_compra = $4, 
           precio_venta = $5, 
-          stock = $6,
-          stock_minimo = $7,
-          codigo_barras = $8
+          stock_minimo = $6,
+          codigo_barras = $7,
+          idlaboratorio = $8
       `;
 
       const queryParams = [
@@ -634,9 +675,9 @@ const productsService = {
         productoData.idubicacion,
         productoData.precio_compra,
         productoData.precio_venta,
-        productoData.stock,
         productoData.stock_minimo || 0,
         productoData.codigo_barras || null,
+        productoData.idlaboratorio
       ];
 
       if (imagenBuffer) {
@@ -661,6 +702,52 @@ const productsService = {
             [id, idcategoria],
           );
         }
+      }
+
+      await client.query(
+        "DELETE FROM lotes WHERE idproducto = $1",
+        [id],
+      );
+
+      if (productoData.lotes && productoData.lotes.length > 0) {
+        const lotesInvalidos = productoData.lotes.some(
+          (lote) =>
+            lote.fecha_vencimiento &&
+            new Date(lote.fecha_vencimiento).toISOString().split("T")[0] < new Date().toISOString().split("T")[0]
+        );
+
+        if (lotesInvalidos) {
+          throw new Error(
+            "Uno o más lotes tienen una fecha de vencimiento anterior a la fecha actual"
+          );
+        }
+
+        const valores = productoData.lotes
+          .map(
+            (_, index) =>
+              `($1, $${index * 2 + 2}, $${index * 2 + 3})`
+          )
+          .join(", ");
+
+        const params = [
+          id,
+          ...productoData.lotes.flatMap((lote) => [
+            lote.stock,
+            lote.fecha_vencimiento || null,
+          ]),
+        ];
+
+        await client.query(
+          `
+            INSERT INTO lotes (
+              idproducto,
+              stock,
+              fecha_vencimiento
+            )
+            VALUES ${valores}
+          `,
+          params
+        );
       }
 
       // Obtener el grupo completo de productos relacionados actualmente
@@ -716,8 +803,8 @@ const productsService = {
 
   updateStockProducto: async (idproducto, cantidad, idlote) => {
     const result = await query(
-      "UPDATE lotes SET stock = stock + $1 WHERE idproducto = $2 AND estado = 0 RETURNING *",
-      [cantidad, idproducto],
+      "UPDATE lotes SET stock = stock + $1 WHERE idproducto = $2 AND idlote = $3 AND estado = 0 RETURNING *",
+      [cantidad, idproducto, idlote],
     );
 
     if (result.rows.length === 0) {
