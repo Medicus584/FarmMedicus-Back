@@ -50,6 +50,7 @@ router.put(
 router.delete("/productos/:id", productsController.deleteProducto);
 
 // Rutas para variantes
-router.patch("/productos/:id/stock", productsController.updateStockProducto);
+router.put("/productos/:id/stock", productsController.updateStockProducto);
+router.post("/productos/:id/stock", productsController.addStockProducto);
 
 module.exports = router;

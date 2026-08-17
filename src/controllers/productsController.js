@@ -52,7 +52,8 @@ const productsController = {
   // Obtener todos los productos
   getTodosProductos: async (req, res) => {
     try {
-      const productos = await productsService.getTodosProductos();
+      const { page, limit } = req.query;
+      const productos = await productsService.getTodosProductos(page, limit);
       res.json(productos);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -62,12 +63,12 @@ const productsController = {
   // Búsqueda específica
   buscarProductos: async (req, res) => {
     try {
-      const { termino } = req.query;
+      const { termino, categoria, laboratorio, page, limit } = req.query;
       if (!termino || termino.trim().length < 2) {
         return res.json([]);
       }
 
-      const productos = await productsService.buscarProductos(termino);
+      const productos = await productsService.buscarProductos(termino, categoria, laboratorio, page, limit);
       res.json(productos);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -166,10 +167,40 @@ const productsController = {
   updateStockProducto: async (req, res) => {
     try {
       const { id } = req.params;
-      const { cantidad } = req.body;
+      const { cantidad, idlote } = req.body;
+      if (cantidad <= 0)
+        res.status(400).json({ error: "el stock no puede ser 0 o menor"});
       const producto = await productsService.updateStockProducto(
         parseInt(id),
         cantidad,
+        idlote,
+      );
+      res.json(producto);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  addStockProducto: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { cantidad, fecha_vencimiento } = req.body;
+      if (cantidad <= 0)
+        res.status(400).json({ error: "El stock no puede ser 0 o menor"});
+
+      const fechaVencimientoDate = new Date(fecha_vencimiento);
+      const fechaActual = new Date();
+      fechaActual.setHours(0, 0, 0, 0);
+      fechaVencimientoDate.setHours(0, 0, 0, 0);
+      
+      if (fechaVencimientoDate < fechaActual) {
+        res.status(400).json({ error: "La fecha de vencimiento no puede ser anterior a la fecha actual"})
+      }
+
+      const producto = await productsService.addStockProducto(
+        parseInt(id),
+        cantidad,
+        fecha_vencimiento,
       );
       res.json(producto);
     } catch (error) {

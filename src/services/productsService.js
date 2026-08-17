@@ -28,128 +28,62 @@ const productsService = {
     return result.rows;
   },
 
-  getTodosProductos: async () => {
-    const result = await query(`
-      SELECT 
-        p.idproducto,
-        p.nombre,
-        p.descripcion,
-        p.idubicacion,
-        u.nombre as ubicacion_nombre,
-        p.estado,
-        p.imagen,
-        p.precio_venta,
-        p.precio_compra,
-        p.stock,
-        p.stock_minimo,
-        p.codigo_barras,
-        ARRAY_AGG(DISTINCT c.nombre) as categorias
+  getTodosProductos: async (page, limit) => {
+    const offset = (page - 1) * limit;
+
+    const countResult = await query(
+      `
+      SELECT COUNT(DISTINCT p.idproducto) as total
       FROM productos p
-      LEFT JOIN ubicaciones u ON p.idubicacion = u.idubicacion
       LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
       LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria
-      WHERE p.estado = 0
-      GROUP BY p.idproducto, u.nombre, u.idubicacion
-      ORDER BY p.nombre
-    `);
-
-    const productos = await Promise.all(
-      result.rows.map(async (producto) => {
-        let imagenBase64 = "";
-        if (producto.imagen) {
-          try {
-            const base64 = producto.imagen.toString("base64");
-            imagenBase64 = `data:image/jpeg;base64,${base64}`;
-          } catch (error) {
-            console.error(
-              `Error al convertir imagen del producto ${producto.idproducto}:`,
-              error,
-            );
-            imagenBase64 = "";
-          }
-        }
-
-        // Obtener productos similares (con relaciones transitivas)
-        const similaresResult = await query(
-          `
-          WITH RECURSIVE similar_products AS (
-            -- Relaciones directas
-            SELECT DISTINCT 
-              CASE 
-                WHEN idproducto = $1::integer THEN idproducto_similar
-                WHEN idproducto_similar = $1::integer THEN idproducto
-              END as idproducto_relacionado
-            FROM productos_similares
-            WHERE idproducto = $1::integer OR idproducto_similar = $1::integer
-            
-            UNION
-            
-            -- Relaciones transitivas
-            SELECT DISTINCT
-              CASE 
-                WHEN ps.idproducto = sp.idproducto_relacionado THEN ps.idproducto_similar
-                WHEN ps.idproducto_similar = sp.idproducto_relacionado THEN ps.idproducto
-              END
-            FROM productos_similares ps
-            INNER JOIN similar_products sp ON 
-              ps.idproducto = sp.idproducto_relacionado OR 
-              ps.idproducto_similar = sp.idproducto_relacionado
-          )
-          SELECT DISTINCT p.idproducto, p.nombre
-          FROM similar_products sp
-          JOIN productos p ON sp.idproducto_relacionado = p.idproducto
-          WHERE p.estado = 0 AND p.idproducto != $1::integer
-          ORDER BY p.nombre
-        `,
-          [producto.idproducto],
-        );
-
-        return {
-          idproducto: producto.idproducto,
-          nombre: producto.nombre,
-          descripcion: producto.descripcion,
-          idubicacion: producto.idubicacion,
-          ubicacion_nombre: producto.ubicacion_nombre,
-          ubicacion: producto.ubicacion_nombre,
-          categorias: producto.categorias?.filter((c) => c !== null) || [],
-          estado: producto.estado,
-          imagen: imagenBase64,
-          precio_venta: producto.precio_venta,
-          precio_compra: producto.precio_compra,
-          stock: producto.stock,
-          stock_minimo: producto.stock_minimo,
-          codigo_barras: producto.codigo_barras,
-          productos_similares: similaresResult.rows,
-        };
-      }),
+      LEFT JOIN producto_tipos pt ON p.idproducto = pt.idproducto
+      LEFT JOIN tipos tp ON pt.idtipo = tp.idtipo
+      LEFT JOIN laboratorios l ON l.idlaboratorio = p.idlaboratorio
+      WHERE p.estado = 0 
+    `,
+      [],
     );
 
-    return productos;
-  },
+    const total = parseInt(countResult.rows[0].total, 10);
 
-  buscarProductos: async (termino) => {
     const result = await query(
       `
       SELECT 
         p.*,
         u.nombre as ubicacion_nombre,
         u.idubicacion,
-        ARRAY_AGG(DISTINCT c.nombre) as categorias,
-        ARRAY_AGG(DISTINCT tp.nombre) as tipos
+        l.nombre_laboratorio as laboratorio_nombre,
+        ARRAY_AGG(DISTINCT c.nombre) FILTER (WHERE c.nombre IS NOT NULL) as categorias,
+        ARRAY_AGG(DISTINCT tp.nombre) FILTER (WHERE tp.nombre IS NOT NULL) as tipos,
+        COALESCE(lt.stock_total, 0) as stock_total,
+        COALESCE(lt.lotes, '[]'::jsonb) as lotes
       FROM productos p
       LEFT JOIN ubicaciones u ON p.idubicacion = u.idubicacion
       LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
       LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria
       LEFT JOIN producto_tipos pt ON p.idproducto = pt.idproducto
       LEFT JOIN tipos tp ON pt.idtipo = tp.idtipo
+      LEFT JOIN laboratorios l ON p.idlaboratorio = l.idlaboratorio
+      LEFT JOIN LATERAL (
+        SELECT 
+          SUM(lo.stock) as stock_total,
+          jsonb_agg(
+            jsonb_build_object(
+              'idlote', lo.idlote,
+              'stock', lo.stock,
+              'fecha_vencimiento', lo.fecha_vencimiento
+            ) ORDER BY lo.fecha_vencimiento NULLS LAST
+          ) as lotes
+        FROM lotes lo
+        WHERE lo.idproducto = p.idproducto AND lo.estado = 0
+      ) lt ON true
       WHERE p.estado = 0 
-        AND (p.nombre ILIKE $1 OR p.descripcion ILIKE $1 
-             OR c.nombre ILIKE $1 OR tp.nombre ILIKE $1
-             OR p.codigo_barras ILIKE $1)
-      GROUP BY p.idproducto, u.nombre, u.idubicacion
+      GROUP BY p.idproducto, u.nombre, u.idubicacion, l.nombre_laboratorio, lt.stock_total, lt.lotes
       ORDER BY p.nombre
+      LIMIT $1 OFFSET $2
     `,
-      [`%${termino}%`],
+      [limit, offset],
     );
 
     const productos = await Promise.all(
@@ -164,15 +98,12 @@ const productsService = {
               `Error al convertir imagen del producto ${producto.idproducto}:`,
               error,
             );
-            imagenBase64 = "";
           }
         }
 
-        // Obtener productos similares (con relaciones transitivas)
         const similaresResult = await query(
           `
           WITH RECURSIVE similar_products AS (
-            -- Relaciones directas
             SELECT DISTINCT 
               CASE 
                 WHEN idproducto = $1::integer THEN idproducto_similar
@@ -183,7 +114,6 @@ const productsService = {
             
             UNION
             
-            -- Relaciones transitivas
             SELECT DISTINCT
               CASE 
                 WHEN ps.idproducto = sp.idproducto_relacionado THEN ps.idproducto_similar
@@ -206,24 +136,190 @@ const productsService = {
         return {
           idproducto: producto.idproducto,
           nombre: producto.nombre,
-          descripcion: producto.descripcion,
+          descripcion: producto.descripcion || '',
           idubicacion: producto.idubicacion,
-          ubicacion_nombre: producto.ubicacion_nombre,
-          ubicacion: producto.ubicacion_nombre,
-          categorias: producto.categorias?.filter((c) => c !== null) || [],
-          estado: producto.estado,
+          ubicacion_nombre: producto.ubicacion_nombre || "Sin ubicación",
+          idlaboratorio: producto.idlaboratorio || 0,
+          laboratorio_nombre: producto.laboratorio_nombre || "Sin laboratorio",
+          categorias: producto.categorias || [],
+          estado: producto.estado ?? 1,
           imagen: imagenBase64,
-          precio_venta: producto.precio_venta,
-          precio_compra: producto.precio_compra,
-          stock: producto.stock,
-          stock_minimo: producto.stock_minimo,
-          codigo_barras: producto.codigo_barras,
+          precio_venta: producto.precio_venta ?? "0",
+          precio_compra: producto.precio_compra ?? "0",
+          stock_total: producto.stock_total || 0,
+          stock_minimo: producto.stock_minimo || 0,
+          codigo_barras: producto.codigo_barras || null,
+          lotes: (producto.lotes || []).map((lote) => ({
+            idlote: lote.idlote,
+            stock: lote.stock,
+            fechaVencimiento: lote.fecha_vencimiento || '',
+          })),
           productos_similares: similaresResult.rows,
         };
       }),
     );
 
-    return productos;
+    return {
+      productos,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  },
+
+  buscarProductos: async (termino, categoria, laboratorio, page = 1, limit = 20) => {
+    const offset = (page - 1) * limit;
+
+    const countResult = await query(
+      `
+      SELECT COUNT(DISTINCT p.idproducto) as total
+      FROM productos p
+      LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
+      LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria
+      LEFT JOIN producto_tipos pt ON p.idproducto = pt.idproducto
+      LEFT JOIN tipos tp ON pt.idtipo = tp.idtipo
+      LEFT JOIN laboratorios l ON l.idlaboratorio = p.idlaboratorio
+      WHERE p.estado = 0 
+        AND (
+              (p.nombre ILIKE $1 OR p.descripcion ILIKE $1 
+              OR c.nombre ILIKE $1 OR tp.nombre ILIKE $1
+              OR p.codigo_barras ILIKE $1)
+              OR (c.nombre LIKE $2)
+              OR (l.nombre_laboratorio LIKE $3)
+            )
+    `,
+      [`%${termino}%`, categoria, laboratorio],
+    );
+
+    const total = parseInt(countResult.rows[0].total, 10);
+
+    const result = await query(
+      `
+      SELECT 
+        p.*,
+        u.nombre as ubicacion_nombre,
+        u.idubicacion,
+        l.nombre_laboratorio as laboratorio_nombre,
+        ARRAY_AGG(DISTINCT c.nombre) FILTER (WHERE c.nombre IS NOT NULL) as categorias,
+        ARRAY_AGG(DISTINCT tp.nombre) FILTER (WHERE tp.nombre IS NOT NULL) as tipos,
+        COALESCE(lt.stock_total, 0) as stock_total,
+        COALESCE(lt.lotes, '[]'::jsonb) as lotes
+      FROM productos p
+      LEFT JOIN ubicaciones u ON p.idubicacion = u.idubicacion
+      LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
+      LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria
+      LEFT JOIN producto_tipos pt ON p.idproducto = pt.idproducto
+      LEFT JOIN tipos tp ON pt.idtipo = tp.idtipo
+      LEFT JOIN laboratorios l ON p.idlaboratorio = l.idlaboratorio
+      LEFT JOIN LATERAL (
+        SELECT 
+          SUM(lo.stock) as stock_total,
+          jsonb_agg(
+            jsonb_build_object(
+              'idlote', lo.idlote,
+              'stock', lo.stock,
+              'fecha_vencimiento', lo.fecha_vencimiento
+            ) ORDER BY lo.fecha_vencimiento NULLS LAST
+          ) as lotes
+        FROM lotes lo
+        WHERE lo.idproducto = p.idproducto AND lo.estado = 0
+      ) lt ON true
+      WHERE p.estado = 0 
+        AND (
+              (p.nombre ILIKE $1 OR p.descripcion ILIKE $1 
+              OR c.nombre ILIKE $1 OR tp.nombre ILIKE $1
+              OR p.codigo_barras ILIKE $1)
+              OR (c.nombre LIKE $4)
+              OR (l.nombre_laboratorio LIKE $5)
+            )
+      GROUP BY p.idproducto, u.nombre, u.idubicacion, l.nombre_laboratorio, lt.stock_total, lt.lotes
+      ORDER BY p.nombre
+      LIMIT $2 OFFSET $3
+    `,
+      [`%${termino}%`, limit, offset, categoria, laboratorio],
+    );
+
+    const productos = await Promise.all(
+      result.rows.map(async (producto) => {
+        let imagenBase64 = "";
+        if (producto.imagen) {
+          try {
+            const base64 = producto.imagen.toString("base64");
+            imagenBase64 = `data:image/jpeg;base64,${base64}`;
+          } catch (error) {
+            console.error(
+              `Error al convertir imagen del producto ${producto.idproducto}:`,
+              error,
+            );
+          }
+        }
+
+        const similaresResult = await query(
+          `
+          WITH RECURSIVE similar_products AS (
+            SELECT DISTINCT 
+              CASE 
+                WHEN idproducto = $1::integer THEN idproducto_similar
+                WHEN idproducto_similar = $1::integer THEN idproducto
+              END as idproducto_relacionado
+            FROM productos_similares
+            WHERE idproducto = $1::integer OR idproducto_similar = $1::integer
+            
+            UNION
+            
+            SELECT DISTINCT
+              CASE 
+                WHEN ps.idproducto = sp.idproducto_relacionado THEN ps.idproducto_similar
+                WHEN ps.idproducto_similar = sp.idproducto_relacionado THEN ps.idproducto
+              END
+            FROM productos_similares ps
+            INNER JOIN similar_products sp ON 
+              ps.idproducto = sp.idproducto_relacionado OR 
+              ps.idproducto_similar = sp.idproducto_relacionado
+          )
+          SELECT DISTINCT p.idproducto, p.nombre
+          FROM similar_products sp
+          JOIN productos p ON sp.idproducto_relacionado = p.idproducto
+          WHERE p.estado = 0 AND p.idproducto != $1::integer
+          ORDER BY p.nombre
+        `,
+          [producto.idproducto],
+        );
+
+        return {
+          idproducto: producto.idproducto,
+          nombre: producto.nombre,
+          descripcion: producto.descripcion || '',
+          idubicacion: producto.idubicacion,
+          ubicacion_nombre: producto.ubicacion_nombre || "Sin ubicación",
+          idlaboratorio: producto.idlaboratorio || 0,
+          laboratorio_nombre: producto.laboratorio_nombre || "Sin laboratorio",
+          categorias: producto.categorias || [],
+          estado: producto.estado ?? 1,
+          imagen: imagenBase64,
+          precio_venta: producto.precio_venta ?? "0",
+          precio_compra: producto.precio_compra ?? "0",
+          stock_total: producto.stock_total || 0,
+          stock_minimo: producto.stock_minimo || 0,
+          codigo_barras: producto.codigo_barras || null,
+          lotes: (producto.lotes || []).map((lote) => ({
+            idlote: lote.idlote,
+            stock: lote.stock,
+            fechaVencimiento: lote.fecha_vencimiento || '',
+          })),
+          productos_similares: similaresResult.rows,
+        };
+      }),
+    );
+
+    return {
+      productos,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   },
 
   getProductoById: async (id) => {
@@ -618,10 +714,27 @@ const productsService = {
     }
   },
 
-  updateStockProducto: async (idproducto, cantidad) => {
+  updateStockProducto: async (idproducto, cantidad, idlote) => {
     const result = await query(
-      "UPDATE productos SET stock = stock + $1 WHERE idproducto = $2 AND estado = 0 RETURNING *",
+      "UPDATE lotes SET stock = stock + $1 WHERE idproducto = $2 AND estado = 0 RETURNING *",
       [cantidad, idproducto],
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error("Producto no encontrada");
+    }
+
+    return result.rows[0];
+  },
+  
+  addStockProducto: async (idproducto, cantidad, fecha_vencimiento) => {
+    const result = await query(
+      `
+        INSERT INTO public.lotes(idproducto, stock, fecha_vencimiento)
+        VALUES ($1, $2, $3)
+        RETURNING *;
+      `,
+      [idproducto, cantidad, fecha_vencimiento],
     );
 
     if (result.rows.length === 0) {
