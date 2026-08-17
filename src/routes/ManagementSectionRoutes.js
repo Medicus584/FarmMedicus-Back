@@ -14,4 +14,11 @@ router.post("/management/ubicaciones", ManagementSectionController.createUbicaci
 router.put("/management/ubicaciones/:id", ManagementSectionController.updateUbicacion);
 router.delete("/management/ubicaciones/:id", ManagementSectionController.deleteUbicacion);
 
+// Rutas para Laboratorios
+
+router.get("/management/laboratorios", ManagementSectionController.getLaboratorios);
+router.post("/management/laboratorio", ManagementSectionController.createLaboratorio);
+router.put("/management/laboratorio/:id", ManagementSectionController.updateLaboratorio);
+router.delete("/management/laboratorio/:id", ManagementSectionController.deleteLaboratorio);
+
 module.exports = router;

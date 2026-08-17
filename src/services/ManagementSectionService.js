@@ -71,6 +71,41 @@ class ManagementSectionService {
       throw new Error("Ubicación no encontrada");
     }
   }
+
+  // Laboratorios
+  static async getLaboratorios() {
+    const result = await query("SELECT idlaboratorio, nombre_laboratorio as nombre, estado FROM laboratorios WHERE estado = 0 ORDER BY nombre_laboratorio");
+    return result.rows;
+  }
+
+  static async createLaboratorio(nombre) {
+    const result = await query(
+      "INSERT INTO laboratorios (nombre_laboratorio) VALUES ($1) RETURNING idlaboratorio, nombre_laboratorio as nombre, estado",
+      [nombre]
+    );
+    return result.rows[0];
+  }
+
+  static async updateLaboratorio(id, nombre) {
+    const result = await query(
+      "UPDATE laboratorios SET nombre_laboratorio = $1 WHERE idlaboratorio = $2 RETURNING idlaboratorio as id, nombre_laboratorio as nombre, estado",
+      [nombre, id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error("Ubicación no encontrada");
+    }
+    return result.rows[0];
+  }
+
+  static async deleteLaboratorio(id) {
+    const result = await query(
+      "UPDATE laboratorios SET estado = 1 WHERE idlaboratorio = $1 RETURNING idlaboratorio",
+      [id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error("Ubicación no encontrada");
+    }
+  }
 }
 
 module.exports = ManagementSectionService;

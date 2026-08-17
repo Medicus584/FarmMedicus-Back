@@ -82,6 +82,47 @@ class ManagementSectionController {
       res.status(400).json({ error: error.message });
     }
   }
+
+  // Laboratorios
+  static async getLaboratorios(req, res) {
+    try {
+      const laboratorios = await ManagementSectionService.getLaboratorios();
+      res.json(laboratorios);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  static async createLaboratorio(req, res) {
+    try {
+      const { nombre } = req.body;
+      const laboratorio = await ManagementSectionService.createLaboratorio(nombre);
+      res.status(201).json(laboratorio);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
+  static async updateLaboratorio(req, res) {
+    try {
+      const { id } = req.params;
+      const { nombre } = req.body;
+      const laboratorios = await ManagementSectionService.updateLaboratorio(parseInt(id), nombre);
+      res.json(laboratorios);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
+  static async deleteLaboratorio(req, res) {
+    try {
+      const { id } = req.params;
+      await ManagementSectionService.deleteLaboratorio(parseInt(id));
+      res.status(204).send();
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
 }
 
 module.exports = ManagementSectionController;
