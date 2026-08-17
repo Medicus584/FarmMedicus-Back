@@ -77,6 +77,11 @@ const productsService = {
           ) as lotes
         FROM lotes lo
         WHERE lo.idproducto = p.idproducto AND lo.estado = 0
+          AND (
+            lo.fecha_vencimiento >= CURRENT_DATE
+            OR lo.stock > 0
+            OR lo.fecha_vencimiento IS NULL
+          )
       ) lt ON true
       WHERE p.estado = 0 
       GROUP BY p.idproducto, u.nombre, u.idubicacion, l.nombre_laboratorio, lt.stock_total, lt.lotes
@@ -224,6 +229,11 @@ const productsService = {
           ) as lotes
         FROM lotes lo
         WHERE lo.idproducto = p.idproducto AND lo.estado = 0
+          AND (
+            lo.fecha_vencimiento >= CURRENT_DATE
+            OR lo.stock > 0
+            OR lo.fecha_vencimiento IS NULL
+          )
       ) lt ON true
       WHERE p.estado = 0 
         AND (
