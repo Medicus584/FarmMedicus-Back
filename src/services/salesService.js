@@ -48,27 +48,101 @@ const processSale = async (saleData, userId) => {
       throw new Error("Usuario no válido o inactivo");
     }
 
-    for (const item of saleData.items) {
-      const stockCheck = await client.query(
-        "SELECT stock FROM productos WHERE idproducto = $1 AND estado = 0",
-        [item.idproducto],
+    if (saleData.doctorId) {
+      const doctorCheck = await client.query(
+        "SELECT iddoctor FROM doctores WHERE iddoctor = $1 AND estado = 0",
+        [saleData.doctorId],
       );
+  
+      if (doctorCheck.rows.length === 0) {
+        throw new Error("Doctor no válido o inactivo");
+      }
+    }
 
-      if (stockCheck.rows.length === 0) {
+    const productIds = saleData.items.map((item) => item.idproducto);
+
+    const loteIds = saleData.items.flatMap((item) =>
+      item.lotes.map((lote) => lote.idlote),
+    );
+
+    const productsResult = await client.query(
+      `
+        SELECT idproducto, nombre
+        FROM productos
+        WHERE idproducto = ANY($1::int[])
+          AND estado = 0
+      `,
+      [productIds],
+    );
+
+    const lotesResult = await client.query(
+      `
+        SELECT idlote, idproducto, stock
+        FROM lotes
+        WHERE idlote = ANY($1::int[])
+          AND estado = 0
+      `,
+      [loteIds],
+    );
+
+    const productsMap = new Map(
+      productsResult.rows.map((producto) => [
+        producto.idproducto,
+        producto,
+      ]),
+    );
+
+    const lotesMap = new Map(
+      lotesResult.rows.map((lote) => [
+        lote.idlote,
+        lote,
+      ]),
+    );
+
+    for (const item of saleData.items) {
+      const product = productsMap.get(item.idproducto);
+
+      if (!product) {
         throw new Error(
           `El producto ${item.idproducto} no existe o está inactivo`,
         );
       }
 
-      if (stockCheck.rows[0].stock < item.cantidad) {
-        const productInfo = await client.query(
-          "SELECT nombre FROM productos WHERE idproducto = $1",
-          [item.idproducto],
-        );
-        const productName = productInfo.rows[0]?.nombre || "Producto";
+      const cantidadLotes = item.lotes.reduce(
+        (total, lote) => total + lote.cantidad,
+        0,
+      );
+
+      if (cantidadLotes !== item.cantidad) {
         throw new Error(
-          `Stock insuficiente para ${productName}. Stock disponible: ${stockCheck.rows[0].stock}`,
+          `La cantidad de lotes seleccionados para ${product.nombre} ` +
+          `(${cantidadLotes}) no coincide con la cantidad solicitada (${item.cantidad})`,
         );
+      }
+
+      for (const loteSeleccionado of item.lotes) {
+        const lote = lotesMap.get(loteSeleccionado.idlote);
+
+        if (!lote) {
+          throw new Error(
+            `El lote ${loteSeleccionado.idlote} no existe o está inactivo`,
+          );
+        }
+
+        // Verificar que el lote pertenezca al producto
+        if (lote.idproducto !== item.idproducto) {
+          throw new Error(
+            `El lote ${lote.idlote} no pertenece al producto ${product.nombre}`,
+          );
+        }
+
+        // Verificar stock
+        if (lote.stock < loteSeleccionado.cantidad) {
+          throw new Error(
+            `Stock insuficiente para ${product.nombre} en el lote ${lote.idlote}. ` +
+            `Stock disponible: ${lote.stock}`,
+          );
+        }
       }
     }
 
@@ -91,21 +165,36 @@ const processSale = async (saleData, userId) => {
 
     for (const item of saleData.items) {
       await client.query(
-        `INSERT INTO detalle_ventas (idventa, idproducto, cantidad, precio_unitario, subtotal_linea) 
-         VALUES ($1, $2, $3, $4, $5)`,
+        `INSERT INTO detalle_ventas (idventa, idproducto, cantidad, precio_unitario, subtotal_linea, iddoctor) 
+         VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           saleId,
           item.idproducto,
           item.cantidad,
           item.precio_unitario,
           item.subtotal_linea,
+          saleData.doctorId ?? null,
         ],
       );
 
-      await client.query(
-        "UPDATE productos SET stock = stock - $1 WHERE idproducto = $2",
-        [item.cantidad, item.idproducto],
-      );
+      for (const lote of item.lotes) {
+        const result = await client.query(
+          `
+            UPDATE lotes
+            SET stock = stock - $1
+            WHERE idlote = $2
+              AND stock >= $1
+              AND estado = 0
+          `,
+          [lote.cantidad, lote.idlote],
+        );
+
+        if (result.rowCount === 0) {
+          throw new Error(
+            `No hay stock suficiente en el lote ${lote.idlote}`,
+          );
+        }
+      }
     }
 
     if (saleData.metodo_pago === "Efectivo") {
