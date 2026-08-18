@@ -8,9 +8,9 @@ const getInventory = async (searchTerm = null, lowMarginOnly = false, categories
         p.nombre as nombre_producto,
         p.precio_compra,
         p.precio_venta,
-        p.stock,
         p.stock_minimo,
         p.estado,
+        COALESCE(lt.stock_total, 0) as stock,
         COALESCE(
           (SELECT MAX(fecha_hora) 
            FROM detalle_ventas dv 
@@ -20,6 +20,17 @@ const getInventory = async (searchTerm = null, lowMarginOnly = false, categories
         ) as ultima_edicion
       FROM productos p
       LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
+      LEFT JOIN LATERAL (
+        SELECT 
+          SUM(lo.stock) as stock_total
+        FROM lotes lo
+        WHERE lo.idproducto = p.idproducto AND lo.estado = 0
+          AND (
+            lo.fecha_vencimiento >= CURRENT_DATE
+            OR lo.stock > 0
+            OR lo.fecha_vencimiento IS NULL
+          )
+      ) lt ON true
       WHERE p.estado = 0
     `;
 
