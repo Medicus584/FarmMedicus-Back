@@ -44,7 +44,10 @@ const getInventory = async (searchTerm = null, lowMarginOnly = false, categories
     }
 
     if (lowMarginOnly) {
-      sqlQuery += ` AND ((p.precio_venta - p.precio_compra) * 100 / p.precio_compra) < 50`;
+      sqlQuery += `
+        AND p.precio_compra > 0
+        AND ((p.precio_venta - p.precio_compra) * 100 / p.precio_compra) < 50
+      `;
     }
 
     if (categories.length > 0) {
@@ -71,6 +74,7 @@ const getLowMarginCount = async () => {
       SELECT COUNT(*) as count
       FROM productos p
       WHERE p.estado = 0
+      AND p.precio_compra > 0
       AND ((p.precio_venta - p.precio_compra) * 100 / p.precio_compra) < 50
     `;
 
