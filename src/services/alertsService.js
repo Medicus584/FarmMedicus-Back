@@ -113,15 +113,16 @@ const getExpirationAlerts = async (filters = {}) => {
       paramCount++;
     }
 
-    // CORREGIDO: Rojo = 0 a 6 meses (180 días)
-    // Amarillo = 7 a 9 meses (181 a 270 días)
-    // Verde = 10 a 12 meses (271 a 365 días)
+    // CORREGIDO: Usando días exactos
+    // Rojo: 0 a 6 meses (0 a 180 días)
+    // Amarillo: 7 a 9 meses (181 a 270 días)
+    // Verde: 10 a 12 meses (271 a 365 días)
     if (prioridad === 'rojo') {
-      sql += ` AND (l.fecha_vencimiento - CURRENT_DATE) <= 180`;
+      sql += ` AND (l.fecha_vencimiento - CURRENT_DATE) >= 0 AND (l.fecha_vencimiento - CURRENT_DATE) <= 180`;
     } else if (prioridad === 'amarillo') {
-      sql += ` AND (l.fecha_vencimiento - CURRENT_DATE) > 180 AND (l.fecha_vencimiento - CURRENT_DATE) <= 270`;
+      sql += ` AND (l.fecha_vencimiento - CURRENT_DATE) >= 181 AND (l.fecha_vencimiento - CURRENT_DATE) <= 270`;
     } else if (prioridad === 'verde') {
-      sql += ` AND (l.fecha_vencimiento - CURRENT_DATE) > 270 AND (l.fecha_vencimiento - CURRENT_DATE) <= 365`;
+      sql += ` AND (l.fecha_vencimiento - CURRENT_DATE) >= 271 AND (l.fecha_vencimiento - CURRENT_DATE) <= 365`;
     }
 
     const countSql = `SELECT COUNT(*) as total FROM (${sql}) as subquery`;
