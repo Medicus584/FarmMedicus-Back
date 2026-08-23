@@ -5,12 +5,11 @@ const productsController = require("../controllers/productsController");
 const multer = require("multer");
 const path = require("path");
 
-// Configuración de multer para manejar archivos
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB límite
+    fileSize: 5 * 1024 * 1024,
   },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif/;
@@ -33,10 +32,11 @@ router.get("/categorias", productsController.getCategorias);
 router.get("/formas-farmaceuticas", productsController.getFormasFarmaceuticas);
 
 // Rutas para productos
-router.get("/productos", productsController.getProductos); // Búsqueda por query param
-router.get("/todos", productsController.getTodosProductos); // Todos los productos
-router.get("/todos-select", productsController.getTodosProductosSelect); // Solo id y nombre para selects
-router.get("/buscar", productsController.buscarProductos); // Búsqueda específica
+router.get("/productos", productsController.getProductos);
+router.get("/todos", productsController.getTodosProductos);
+router.get("/todos-select", productsController.getTodosProductosSelect);
+router.get("/buscar", productsController.buscarProductos);
+router.get("/productos/codigo/:codigoP", productsController.getProductoByCodigoP);
 router.get("/productos/:id", productsController.getProductoById);
 router.post(
   "/productos",
@@ -50,15 +50,9 @@ router.put(
 );
 router.delete("/productos/:id", productsController.deleteProducto);
 
-// Rutas para variantes
+// Rutas para gestión de stock
 router.put("/productos/:id/stock", productsController.updateStockProducto);
 router.post("/productos/:id/stock", productsController.addStockProducto);
-
-// Rutas para gestión de formas farmacéuticas
-router.get("/management/formas-farmaceuticas", productsController.getFormasFarmaceuticas);
-router.post("/management/formas-farmaceuticas", productsController.createFormaFarmaceutica);
-router.put("/management/formas-farmaceuticas/:id", productsController.updateFormaFarmaceutica);
-router.delete("/management/formas-farmaceuticas/:id", productsController.deleteFormaFarmaceutica);
 
 // Rutas para gestión de ubicaciones
 router.get("/management/ubicaciones", productsController.getUbicaciones);
@@ -77,5 +71,11 @@ router.get("/management/laboratorios", productsController.getLaboratorios);
 router.post("/management/laboratorio", productsController.createLaboratorio);
 router.put("/management/laboratorio/:id", productsController.updateLaboratorio);
 router.delete("/management/laboratorio/:id", productsController.deleteLaboratorio);
+
+// Rutas para gestión de formas farmacéuticas
+router.get("/management/formas-farmaceuticas", productsController.getFormasFarmaceuticas);
+router.post("/management/formas-farmaceuticas", productsController.createFormaFarmaceutica);
+router.put("/management/formas-farmaceuticas/:id", productsController.updateFormaFarmaceutica);
+router.delete("/management/formas-farmaceuticas/:id", productsController.deleteFormaFarmaceutica);
 
 module.exports = router;

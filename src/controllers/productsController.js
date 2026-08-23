@@ -2,7 +2,6 @@
 const productsService = require("../services/productsService");
 
 const productsController = {
-  // Obtener opciones de selección
   getUbicaciones: async (req, res) => {
     try {
       const ubicaciones = await productsService.getUbicaciones();
@@ -39,7 +38,6 @@ const productsController = {
     }
   },
 
-  // Obtener solo id y nombre para selects
   getTodosProductosSelect: async (req, res) => {
     try {
       const productos = await productsService.getTodosProductosSelect();
@@ -49,7 +47,33 @@ const productsController = {
     }
   },
 
-  // CRUD de productos
+  getProductoByCodigoP: async (req, res) => {
+    try {
+      const { codigoP } = req.params;
+      
+      if (!codigoP || codigoP.trim() === '') {
+        return res.status(400).json({ error: "Código de producto requerido" });
+      }
+      
+      const producto = await productsService.getProductoByCodigoP(codigoP);
+      
+      if (!producto) {
+        return res.status(404).json({ 
+          exists: false,
+          message: "Producto no encontrado" 
+        });
+      }
+      
+      res.json({ 
+        exists: true,
+        producto 
+      });
+    } catch (error) {
+      console.error("Error buscando producto por código:", error);
+      res.status(500).json({ error: error.message });
+    }
+  },
+
   getProductos: async (req, res) => {
     try {
       const { termino } = req.query;
@@ -67,7 +91,6 @@ const productsController = {
     }
   },
 
-  // Obtener todos los productos
   getTodosProductos: async (req, res) => {
     try {
       const { page, limit } = req.query;
@@ -88,7 +111,6 @@ const productsController = {
     }
   },
 
-  // Búsqueda específica
   buscarProductos: async (req, res) => {
     try {
       const { termino, categoria, laboratorio, page, limit } = req.query;
@@ -120,6 +142,7 @@ const productsController = {
       const producto = await productsService.getProductoById(parseInt(id));
       res.json(producto);
     } catch (error) {
+      console.error("Error en getProductoById:", error);
       res.status(500).json({ error: error.message });
     }
   },
@@ -127,6 +150,7 @@ const productsController = {
   createProducto: async (req, res) => {
     try {
       const productoData = {
+        codigoP: req.body.codigoP || null,
         nombre: req.body.nombre,
         descripcion: req.body.descripcion,
         idubicacion: parseInt(req.body.idubicacion),
@@ -155,6 +179,12 @@ const productsController = {
       res.status(201).json(producto);
     } catch (error) {
       console.error("Error creating producto:", error);
+      if (error.message.includes("Ya existe un producto con el código")) {
+        return res.status(409).json({ 
+          error: error.message,
+          code: "DUPLICATE_CODE" 
+        });
+      }
       res.status(500).json({ error: error.message });
     }
   },
@@ -164,6 +194,7 @@ const productsController = {
       const { id } = req.params;
 
       const productoData = {
+        codigoP: req.body.codigoP || null,
         nombre: req.body.nombre,
         descripcion: req.body.descripcion,
         idubicacion: parseInt(req.body.idubicacion),
@@ -193,6 +224,12 @@ const productsController = {
       res.json(producto);
     } catch (error) {
       console.error("Error updating producto:", error);
+      if (error.message.includes("Ya existe otro producto con el código")) {
+        return res.status(409).json({ 
+          error: error.message,
+          code: "DUPLICATE_CODE" 
+        });
+      }
       res.status(500).json({ error: error.message });
     }
   },
@@ -251,7 +288,6 @@ const productsController = {
     }
   },
 
-  // Gestión de ubicaciones
   createUbicacion: async (req, res) => {
     try {
       const ubicacion = await productsService.createUbicacion(req.body);
@@ -281,7 +317,6 @@ const productsController = {
     }
   },
 
-  // Gestión de categorías
   createCategoria: async (req, res) => {
     try {
       const categoria = await productsService.createCategoria(req.body);
@@ -311,7 +346,6 @@ const productsController = {
     }
   },
 
-  // Gestión de laboratorios
   createLaboratorio: async (req, res) => {
     try {
       const laboratorio = await productsService.createLaboratorio(req.body);
@@ -341,7 +375,6 @@ const productsController = {
     }
   },
 
-  // Gestión de formas farmacéuticas
   createFormaFarmaceutica: async (req, res) => {
     try {
       const forma = await productsService.createFormaFarmaceutica(req.body);

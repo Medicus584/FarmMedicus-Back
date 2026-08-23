@@ -31,7 +31,6 @@ const productsService = {
     return result.rows;
   },
 
-  // Obtener solo id y nombre para selects
   getTodosProductosSelect: async () => {
     const result = await query(`
       SELECT idproducto, nombre 
@@ -40,6 +39,126 @@ const productsService = {
       ORDER BY nombre
     `);
     return result.rows;
+  },
+
+  getProductoByCodigoP: async (codigoP) => {
+    if (!codigoP || codigoP.trim() === '') {
+      return null;
+    }
+
+    const result = await query(
+      `SELECT 
+        p.*,
+        u.nombre as ubicacion_nombre,
+        l.nombre_laboratorio as laboratorio_nombre,
+        ff.nombre_forma as forma_farmaceutica_nombre,
+        ARRAY_AGG(DISTINCT c.nombre) FILTER (WHERE c.nombre IS NOT NULL) as categorias,
+        COALESCE(lt.stock_total, 0) as stock_total,
+        COALESCE(lt.lotes, '[]'::jsonb) as lotes
+      FROM productos p
+      LEFT JOIN ubicaciones u ON p.idubicacion = u.idubicacion
+      LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
+      LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria
+      LEFT JOIN laboratorios l ON p.idlaboratorio = l.idlaboratorio
+      LEFT JOIN forma_farmaceutica ff ON p.idforma_farmaceutica = ff.idforma_farmaceutica
+      LEFT JOIN LATERAL (
+        SELECT 
+          SUM(lo.stock) as stock_total,
+          jsonb_agg(
+            jsonb_build_object(
+              'idlote', lo.idlote,
+              'stock', lo.stock,
+              'fecha_vencimiento', lo.fecha_vencimiento
+            ) ORDER BY lo.fecha_vencimiento NULLS LAST
+          ) as lotes
+        FROM lotes lo
+        WHERE lo.idproducto = p.idproducto AND lo.estado = 0
+          AND (
+            lo.fecha_vencimiento >= CURRENT_DATE
+            OR lo.stock > 0
+            OR lo.fecha_vencimiento IS NULL
+          )
+      ) lt ON true
+      WHERE p.estado = 0 AND p.codigop = $1
+      GROUP BY p.idproducto, u.nombre, u.idubicacion, l.nombre_laboratorio, ff.nombre_forma, lt.stock_total, lt.lotes
+      `,
+      [codigoP.trim()]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const producto = result.rows[0];
+
+    let imagenBase64 = "";
+    if (producto.imagen) {
+      try {
+        const base64 = producto.imagen.toString("base64");
+        imagenBase64 = `data:image/jpeg;base64,${base64}`;
+      } catch (error) {
+        console.error(`Error al convertir imagen del producto ${producto.idproducto}:`, error);
+      }
+    }
+
+    const similaresResult = await query(
+      `
+      WITH RECURSIVE similar_products AS (
+        SELECT DISTINCT 
+          CASE 
+            WHEN idproducto = $1::integer THEN idproducto_similar
+            WHEN idproducto_similar = $1::integer THEN idproducto
+          END as idproducto_relacionado
+        FROM productos_similares
+        WHERE idproducto = $1::integer OR idproducto_similar = $1::integer
+        
+        UNION
+        
+        SELECT DISTINCT
+          CASE 
+            WHEN ps.idproducto = sp.idproducto_relacionado THEN ps.idproducto_similar
+            WHEN ps.idproducto_similar = sp.idproducto_relacionado THEN ps.idproducto
+          END
+        FROM productos_similares ps
+        INNER JOIN similar_products sp ON 
+          ps.idproducto = sp.idproducto_relacionado OR 
+          ps.idproducto_similar = sp.idproducto_relacionado
+      )
+      SELECT DISTINCT p.idproducto, p.nombre
+      FROM similar_products sp
+      JOIN productos p ON sp.idproducto_relacionado = p.idproducto
+      WHERE p.estado = 0 AND p.idproducto != $1::integer
+      ORDER BY p.nombre
+      `,
+      [producto.idproducto]
+    );
+
+    return {
+      idproducto: producto.idproducto,
+      codigoP: producto.codigop,
+      nombre: producto.nombre,
+      descripcion: producto.descripcion || '',
+      idubicacion: producto.idubicacion,
+      ubicacion_nombre: producto.ubicacion_nombre || "Sin ubicación",
+      idlaboratorio: producto.idlaboratorio || 0,
+      laboratorio_nombre: producto.laboratorio_nombre || "Sin laboratorio",
+      idforma_farmaceutica: producto.idforma_farmaceutica || 0,
+      forma_farmaceutica_nombre: producto.forma_farmaceutica_nombre || "Sin forma farmacéutica",
+      categorias: producto.categorias || [],
+      estado: producto.estado ?? 1,
+      imagen: imagenBase64,
+      precio_venta: producto.precio_venta ?? "0",
+      precio_compra: producto.precio_compra ?? "0",
+      stock_total: producto.stock_total || 0,
+      stock_minimo: producto.stock_minimo || 0,
+      codigo_barras: producto.codigo_barras || null,
+      lotes: (producto.lotes || []).map((lote) => ({
+        idlote: lote.idlote,
+        stock: lote.stock,
+        fechaVencimiento: lote.fecha_vencimiento || '',
+      })),
+      productos_similares: similaresResult.rows,
+    };
   },
 
   getTodosProductos: async (page, limit) => {
@@ -161,6 +280,7 @@ const productsService = {
 
         return {
           idproducto: producto.idproducto,
+          codigoP: producto.codigop,
           nombre: producto.nombre,
           descripcion: producto.descripcion || '',
           idubicacion: producto.idubicacion,
@@ -206,6 +326,7 @@ const productsService = {
     if (termino && termino.trim().length >= 2) {
       const searchTerm = `%${termino.trim()}%`;
       whereClause += ` AND (
+        p.codigop ILIKE $${paramIndex} OR 
         p.nombre ILIKE $${paramIndex} OR 
         p.descripcion ILIKE $${paramIndex} OR 
         p.codigo_barras ILIKE $${paramIndex}
@@ -346,6 +467,7 @@ const productsService = {
 
         return {
           idproducto: producto.idproducto,
+          codigoP: producto.codigop,
           nombre: producto.nombre,
           descripcion: producto.descripcion || '',
           idubicacion: producto.idubicacion,
@@ -391,7 +513,9 @@ const productsService = {
         l.nombre_laboratorio as laboratorio_nombre,
         ff.nombre_forma as forma_farmaceutica_nombre,
         ARRAY_AGG(DISTINCT c.nombre) as categorias,
-        ARRAY_AGG(DISTINCT tp.nombre) as tipos
+        ARRAY_AGG(DISTINCT tp.nombre) as tipos,
+        COALESCE(lt.stock_total, 0) as stock_total,
+        COALESCE(lt.lotes, '[]'::jsonb) as lotes
       FROM productos p
       LEFT JOIN ubicaciones u ON p.idubicacion = u.idubicacion
       LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
@@ -400,8 +524,26 @@ const productsService = {
       LEFT JOIN tipos tp ON pt.idtipo = tp.idtipo
       LEFT JOIN laboratorios l ON p.idlaboratorio = l.idlaboratorio
       LEFT JOIN forma_farmaceutica ff ON p.idforma_farmaceutica = ff.idforma_farmaceutica
+      LEFT JOIN LATERAL (
+        SELECT 
+          SUM(lo.stock) as stock_total,
+          jsonb_agg(
+            jsonb_build_object(
+              'idlote', lo.idlote,
+              'stock', lo.stock,
+              'fecha_vencimiento', lo.fecha_vencimiento
+            ) ORDER BY lo.fecha_vencimiento NULLS LAST
+          ) as lotes
+        FROM lotes lo
+        WHERE lo.idproducto = p.idproducto AND lo.estado = 0
+          AND (
+            lo.fecha_vencimiento >= CURRENT_DATE
+            OR lo.stock > 0
+            OR lo.fecha_vencimiento IS NULL
+          )
+      ) lt ON true
       WHERE p.idproducto = $1 AND p.estado = 0
-      GROUP BY p.idproducto, u.nombre, u.idubicacion, l.nombre_laboratorio, ff.nombre_forma
+      GROUP BY p.idproducto, u.nombre, u.idubicacion, l.nombre_laboratorio, ff.nombre_forma, lt.stock_total, lt.lotes
     `,
       [id],
     );
@@ -460,11 +602,12 @@ const productsService = {
 
     const productoProcesado = {
       idproducto: producto.idproducto,
+      codigoP: producto.codigop,
       nombre: producto.nombre,
       descripcion: producto.descripcion || '',
       idubicacion: producto.idubicacion,
-      ubicacion_nombre: producto.ubicacion_nombre,
-      ubicacion: producto.ubicacion_nombre,
+      ubicacion_nombre: producto.ubicacion_nombre || "Sin ubicación",
+      ubicacion: producto.ubicacion_nombre || "Sin ubicación",
       idlaboratorio: producto.idlaboratorio || 0,
       laboratorio_nombre: producto.laboratorio_nombre || "Sin laboratorio",
       laboratorio: producto.laboratorio_nombre || "Sin laboratorio",
@@ -474,10 +617,16 @@ const productsService = {
       categorias: producto.categorias?.filter((c) => c !== null) || [],
       estado: producto.estado,
       imagen: imagenBase64,
-      precio_venta: producto.precio_venta,
-      precio_compra: producto.precio_compra,
-      stock_minimo: producto.stock_minimo,
-      codigo_barras: producto.codigo_barras,
+      precio_venta: producto.precio_venta || "0",
+      precio_compra: producto.precio_compra || "0",
+      stock_total: producto.stock_total || 0,
+      stock_minimo: producto.stock_minimo || 0,
+      codigo_barras: producto.codigo_barras || null,
+      lotes: (producto.lotes || []).map((lote) => ({
+        idlote: lote.idlote,
+        stock: lote.stock,
+        fechaVencimiento: lote.fecha_vencimiento || '',
+      })),
       productos_similares: similaresResult.rows,
     };
 
@@ -568,6 +717,17 @@ const productsService = {
     try {
       await client.query("BEGIN");
 
+      if (productoData.codigoP) {
+        const existingProduct = await client.query(
+          "SELECT idproducto FROM productos WHERE codigop = $1 AND estado = 0",
+          [productoData.codigoP.trim()]
+        );
+        
+        if (existingProduct.rows.length > 0) {
+          throw new Error(`Ya existe un producto con el código "${productoData.codigoP}"`);
+        }
+      }
+
       let imagenBuffer = null;
       if (imagenFile) {
         if (imagenFile.buffer) {
@@ -581,10 +741,12 @@ const productsService = {
 
       const productoResult = await client.query(
         `INSERT INTO productos (
-          nombre, descripcion, idubicacion, imagen, 
-          precio_compra, precio_venta, idlaboratorio, idforma_farmaceutica, stock_minimo, codigo_barras, estado
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0) RETURNING *`,
+          codigop, nombre, descripcion, idubicacion, imagen, 
+          precio_compra, precio_venta, idlaboratorio, idforma_farmaceutica, 
+          stock_minimo, codigo_barras, estado
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 0) RETURNING *`,
         [
+          productoData.codigoP || null,
           productoData.nombre,
           productoData.descripcion,
           productoData.idubicacion,
@@ -687,6 +849,17 @@ const productsService = {
         throw new Error("Producto no encontrado");
       }
 
+      if (productoData.codigoP) {
+        const existingProduct = await client.query(
+          "SELECT idproducto FROM productos WHERE codigop = $1 AND estado = 0 AND idproducto != $2",
+          [productoData.codigoP.trim(), id]
+        );
+        
+        if (existingProduct.rows.length > 0) {
+          throw new Error(`Ya existe otro producto con el código "${productoData.codigoP}"`);
+        }
+      }
+
       let imagenBuffer = null;
       if (imagenFile) {
         if (imagenFile.buffer) {
@@ -700,18 +873,20 @@ const productsService = {
 
       let updateQuery = `
         UPDATE productos SET 
-          nombre = $1, 
-          descripcion = $2, 
-          idubicacion = $3,
-          precio_compra = $4, 
-          precio_venta = $5, 
-          stock_minimo = $6,
-          codigo_barras = $7,
-          idlaboratorio = $8,
-          idforma_farmaceutica = $9
+          codigop = $1,
+          nombre = $2, 
+          descripcion = $3, 
+          idubicacion = $4,
+          precio_compra = $5, 
+          precio_venta = $6, 
+          stock_minimo = $7,
+          codigo_barras = $8,
+          idlaboratorio = $9,
+          idforma_farmaceutica = $10
       `;
 
       const queryParams = [
+        productoData.codigoP || null,
         productoData.nombre,
         productoData.descripcion,
         productoData.idubicacion,
@@ -724,10 +899,10 @@ const productsService = {
       ];
 
       if (imagenBuffer) {
-        updateQuery += `, imagen = $10 WHERE idproducto = $11`;
+        updateQuery += `, imagen = $11 WHERE idproducto = $12`;
         queryParams.push(imagenBuffer, id);
       } else {
-        updateQuery += ` WHERE idproducto = $10`;
+        updateQuery += ` WHERE idproducto = $11`;
         queryParams.push(id);
       }
 
@@ -865,7 +1040,6 @@ const productsService = {
     return result.rows[0];
   },
 
-  // Gestión de ubicaciones
   createUbicacion: async (data) => {
     const result = await query(
       "INSERT INTO ubicaciones (nombre) VALUES ($1) RETURNING *",
@@ -895,7 +1069,6 @@ const productsService = {
     }
   },
 
-  // Gestión de categorías
   createCategoria: async (data) => {
     const result = await query(
       "INSERT INTO categorias (nombre) VALUES ($1) RETURNING *",
@@ -925,7 +1098,6 @@ const productsService = {
     }
   },
 
-  // Gestión de laboratorios
   createLaboratorio: async (data) => {
     const result = await query(
       "INSERT INTO laboratorios (nombre_laboratorio) VALUES ($1) RETURNING *",
@@ -955,7 +1127,6 @@ const productsService = {
     }
   },
 
-  // Gestión de formas farmacéuticas
   createFormaFarmaceutica: async (data) => {
     const result = await query(
       "INSERT INTO forma_farmaceutica (nombre_forma) VALUES ($1) RETURNING *",
