@@ -6,6 +6,7 @@ const getInventory = async (searchTerm = null, lowMarginOnly = false, categories
     let sqlQuery = `
       SELECT DISTINCT
         p.idproducto,
+        p.codigop,
         p.nombre as nombre_producto,
         p.descripcion,
         p.precio_compra,
@@ -41,8 +42,8 @@ const getInventory = async (searchTerm = null, lowMarginOnly = false, categories
 
     if (searchTerm) {
       paramCount++;
-      // Búsqueda por nombre O descripción (ILIKE para búsqueda insensible a mayúsculas)
-      sqlQuery += ` AND (p.nombre ILIKE $${paramCount} OR p.descripcion ILIKE $${paramCount})`;
+      // Búsqueda por nombre, descripción O código
+      sqlQuery += ` AND (p.nombre ILIKE $${paramCount} OR p.descripcion ILIKE $${paramCount} OR p.codigop ILIKE $${paramCount})`;
       params.push(`%${searchTerm}%`);
     }
 
