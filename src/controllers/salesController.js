@@ -36,43 +36,51 @@ const getDoctores = async (req, res) => {
     console.error("Error obteniendo doctores:", error);
     res.status(500).json({ error: error.message });
   }
-}
+};
 
 const createDoctor = async (req, res) => {
   try {
     const { nombre } = req.body;
 
-    const doctor = await salesService.createDoctor(nombre);
+    if (!nombre || !nombre.trim()) {
+      return res.status(400).json({ error: "El nombre del doctor es obligatorio" });
+    }
+
+    const doctor = await salesService.createDoctor(nombre.trim());
     res.status(201).json(doctor);
   } catch (error) {
     console.error("Error creando doctor:", error);
     res.status(500).json({ error: error.message });
   }
-}
+};
 
 const updateDoctor = async (req, res) => {
   try {
     const { id } = req.params;
     const { nombre } = req.body;
 
-    const doctor = await salesService.updateDoctor(nombre, id);
+    if (!nombre || !nombre.trim()) {
+      return res.status(400).json({ error: "El nombre del doctor es obligatorio" });
+    }
+
+    const doctor = await salesService.updateDoctor(nombre.trim(), id);
     res.json(doctor);
   } catch (error) {
     console.error("Error actualizando doctor:", error);
     res.status(500).json({ error: error.message });
   }
-}
+};
 
 const deleteDoctor = async (req, res) => {
   try {
     const { id } = req.params;
-    const doctor = await salesService.deleteDoctor(id);
+    await salesService.deleteDoctor(id);
     res.status(204).send();
   } catch (error) {
-    console.error("Error obteniendo doctores:", error);
+    console.error("Error eliminando doctor:", error);
     res.status(500).json({ error: error.message });
   }
-}
+};
 
 module.exports = {
   getCashStatus,

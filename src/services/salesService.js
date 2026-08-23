@@ -24,6 +24,7 @@ const processSale = async (saleData, userId) => {
   try {
     await client.query("BEGIN");
 
+    // Verificar si la caja está abierta para pagos en efectivo
     if (saleData.metodo_pago === "Efectivo") {
       const cashStatusCheck = await client.query(
         "SELECT * FROM estado_caja ORDER BY idestado_caja DESC LIMIT 1",
@@ -39,6 +40,7 @@ const processSale = async (saleData, userId) => {
       }
     }
 
+    // Verificar usuario
     const userCheck = await client.query(
       "SELECT idusuario FROM usuarios WHERE idusuario = $1 AND estado = 0",
       [userId],
@@ -48,23 +50,25 @@ const processSale = async (saleData, userId) => {
       throw new Error("Usuario no válido o inactivo");
     }
 
+    // Verificar doctor si se proporcionó
     if (saleData.doctorId) {
       const doctorCheck = await client.query(
         "SELECT iddoctor FROM doctores WHERE iddoctor = $1 AND estado = 0",
         [saleData.doctorId],
       );
-  
+
       if (doctorCheck.rows.length === 0) {
         throw new Error("Doctor no válido o inactivo");
       }
     }
 
+    // Obtener IDs de productos y lotes
     const productIds = saleData.items.map((item) => item.idproducto);
-
     const loteIds = saleData.items.flatMap((item) =>
       item.lotes.map((lote) => lote.idlote),
     );
 
+    // Verificar productos
     const productsResult = await client.query(
       `
         SELECT idproducto, nombre
@@ -75,6 +79,7 @@ const processSale = async (saleData, userId) => {
       [productIds],
     );
 
+    // Verificar lotes
     const lotesResult = await client.query(
       `
         SELECT idlote, idproducto, stock
@@ -99,6 +104,7 @@ const processSale = async (saleData, userId) => {
       ]),
     );
 
+    // Validar productos y lotes
     for (const item of saleData.items) {
       const product = productsMap.get(item.idproducto);
 
@@ -129,14 +135,12 @@ const processSale = async (saleData, userId) => {
           );
         }
 
-        // Verificar que el lote pertenezca al producto
         if (lote.idproducto !== item.idproducto) {
           throw new Error(
             `El lote ${lote.idlote} no pertenece al producto ${product.nombre}`,
           );
         }
 
-        // Verificar stock
         if (lote.stock < loteSeleccionado.cantidad) {
           throw new Error(
             `Stock insuficiente para ${product.nombre} en el lote ${lote.idlote}. ` +
@@ -146,6 +150,7 @@ const processSale = async (saleData, userId) => {
       }
     }
 
+    // Insertar venta
     const saleResult = await client.query(
       `INSERT INTO ventas (fecha_hora, idusuario, descripcion, sub_total, descuento, total, metodo_pago, descripcion_descuento) 
        VALUES (TIMEZONE('America/La_Paz', NOW()), $1, $2, $3, $4, $5, $6, $7) 
@@ -157,26 +162,43 @@ const processSale = async (saleData, userId) => {
         saleData.descuento,
         saleData.total,
         saleData.metodo_pago,
-        saleData.descripcion_descuento,
+        saleData.descripcion_descuento || null,
       ],
     );
 
     const saleId = saleResult.rows[0].idventa;
 
+    // Insertar detalles de venta con descuento_monto por producto
     for (const item of saleData.items) {
+      // Calcular el descuento por producto (si viene del frontend)
+      // El descuento_monto se calcula como: (precio_unitario * cantidad) - (precio_unitario * cantidad * (1 - descuento_producto/100))
+      // O simplemente se pasa el monto del descuento directamente
+      let descuentoMonto = 0;
+      
+      // Si el item tiene un campo descuento_producto (porcentaje), calculamos el monto
+      if (item.descuento_producto && item.descuento_producto > 0) {
+        const subtotalLinea = item.precio_unitario * item.cantidad;
+        descuentoMonto = (subtotalLinea * item.descuento_producto) / 100;
+      } else if (item.descuento_monto) {
+        // Si ya viene el monto directamente
+        descuentoMonto = item.descuento_monto;
+      }
+
       await client.query(
-        `INSERT INTO detalle_ventas (idventa, idproducto, cantidad, precio_unitario, subtotal_linea, iddoctor) 
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+        `INSERT INTO detalle_ventas (idventa, idproducto, cantidad, precio_unitario, subtotal_linea, descuento_monto, iddoctor) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           saleId,
           item.idproducto,
           item.cantidad,
           item.precio_unitario,
           item.subtotal_linea,
-          saleData.doctorId ?? null,
+          descuentoMonto,
+          saleData.doctorId || null,
         ],
       );
 
+      // Actualizar stock de lotes
       for (const lote of item.lotes) {
         const result = await client.query(
           `
@@ -197,6 +219,7 @@ const processSale = async (saleData, userId) => {
       }
     }
 
+    // Registrar transacción de caja para pagos en efectivo
     if (saleData.metodo_pago === "Efectivo") {
       const lastMontoFinalResult = await client.query(
         "SELECT monto_final FROM estado_caja ORDER BY idestado_caja DESC LIMIT 1",
@@ -220,7 +243,7 @@ const processSale = async (saleData, userId) => {
          VALUES ($1, 'Ingreso', $2, $3, TIMEZONE('America/La_Paz', NOW()), $4, $5)`,
         [
           newCashStatusId,
-          `Venta: ${saleData.descripcion}`,
+          `Venta N° ${saleId}: ${saleData.descripcion}`,
           saleData.total,
           userId,
           saleId,
@@ -248,7 +271,7 @@ const getDoctores = async () => {
   } catch (error) {
     throw error;
   }
-}
+};
 
 const createDoctor = async (nombre) => {
   try {
@@ -260,12 +283,12 @@ const createDoctor = async (nombre) => {
   } catch (error) {
     throw error;
   }
-}
+};
 
 const updateDoctor = async (nombre, id) => {
   try {
     const result = await query(
-      "UPDATE doctores SET nombre_doctor = $1 WHERE iddoctor = $2 RETURNING iddoctor as id, nombre_doctor as nombre",
+      "UPDATE doctores SET nombre_doctor = $1 WHERE iddoctor = $2 AND estado = 0 RETURNING iddoctor as id, nombre_doctor as nombre",
       [nombre, id]
     );
     if (result.rows.length === 0) {
@@ -275,12 +298,12 @@ const updateDoctor = async (nombre, id) => {
   } catch (error) {
     throw error;
   }
-}
+};
 
 const deleteDoctor = async (id) => {
   try {
     const result = await query(
-      "UPDATE doctores SET estado = 1 WHERE iddoctor = $1 RETURNING iddoctor as id, nombre_doctor as nombre",
+      "UPDATE doctores SET estado = 1 WHERE iddoctor = $1 AND estado = 0 RETURNING iddoctor as id, nombre_doctor as nombre",
       [id]
     );
     if (result.rows.length === 0) {
@@ -289,7 +312,7 @@ const deleteDoctor = async (id) => {
   } catch (error) {
     throw error;
   }
-}
+};
 
 module.exports = {
   getCurrentCashStatus,
