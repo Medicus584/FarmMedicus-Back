@@ -17,6 +17,20 @@ const productsService = {
     return result.rows;
   },
 
+  getLaboratorios: async () => {
+    const result = await query(
+      "SELECT * FROM laboratorios WHERE estado = 0 ORDER BY nombre_laboratorio",
+    );
+    return result.rows;
+  },
+
+  getFormasFarmaceuticas: async () => {
+    const result = await query(
+      "SELECT * FROM forma_farmaceutica WHERE estado = 0 ORDER BY nombre_forma",
+    );
+    return result.rows;
+  },
+
   // Obtener solo id y nombre para selects
   getTodosProductosSelect: async () => {
     const result = await query(`
@@ -59,6 +73,7 @@ const productsService = {
         u.nombre as ubicacion_nombre,
         u.idubicacion,
         l.nombre_laboratorio as laboratorio_nombre,
+        ff.nombre_forma as forma_farmaceutica_nombre,
         ARRAY_AGG(DISTINCT c.nombre) FILTER (WHERE c.nombre IS NOT NULL) as categorias,
         ARRAY_AGG(DISTINCT tp.nombre) FILTER (WHERE tp.nombre IS NOT NULL) as tipos,
         COALESCE(lt.stock_total, 0) as stock_total,
@@ -70,6 +85,7 @@ const productsService = {
       LEFT JOIN producto_tipos pt ON p.idproducto = pt.idproducto
       LEFT JOIN tipos tp ON pt.idtipo = tp.idtipo
       LEFT JOIN laboratorios l ON p.idlaboratorio = l.idlaboratorio
+      LEFT JOIN forma_farmaceutica ff ON p.idforma_farmaceutica = ff.idforma_farmaceutica
       LEFT JOIN LATERAL (
         SELECT 
           SUM(lo.stock) as stock_total,
@@ -89,7 +105,7 @@ const productsService = {
           )
       ) lt ON true
       WHERE p.estado = 0 
-      GROUP BY p.idproducto, u.nombre, u.idubicacion, l.nombre_laboratorio, lt.stock_total, lt.lotes
+      GROUP BY p.idproducto, u.nombre, u.idubicacion, l.nombre_laboratorio, ff.nombre_forma, lt.stock_total, lt.lotes
       ORDER BY p.nombre
       LIMIT $1 OFFSET $2
     `,
@@ -151,6 +167,8 @@ const productsService = {
           ubicacion_nombre: producto.ubicacion_nombre || "Sin ubicación",
           idlaboratorio: producto.idlaboratorio || 0,
           laboratorio_nombre: producto.laboratorio_nombre || "Sin laboratorio",
+          idforma_farmaceutica: producto.idforma_farmaceutica || 0,
+          forma_farmaceutica_nombre: producto.forma_farmaceutica_nombre || "Sin forma farmacéutica",
           categorias: producto.categorias || [],
           estado: producto.estado ?? 1,
           imagen: imagenBase64,
@@ -243,6 +261,7 @@ const productsService = {
         u.nombre as ubicacion_nombre,
         u.idubicacion,
         l.nombre_laboratorio as laboratorio_nombre,
+        ff.nombre_forma as forma_farmaceutica_nombre,
         ARRAY_AGG(DISTINCT c.nombre) FILTER (WHERE c.nombre IS NOT NULL) as categorias,
         COALESCE(lt.stock_total, 0) as stock_total,
         COALESCE(lt.lotes, '[]'::jsonb) as lotes
@@ -251,6 +270,7 @@ const productsService = {
       LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
       LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria
       LEFT JOIN laboratorios l ON p.idlaboratorio = l.idlaboratorio
+      LEFT JOIN forma_farmaceutica ff ON p.idforma_farmaceutica = ff.idforma_farmaceutica
       LEFT JOIN LATERAL (
         SELECT 
           SUM(lo.stock) as stock_total,
@@ -270,7 +290,7 @@ const productsService = {
           )
       ) lt ON true
       WHERE ${whereClause}
-      GROUP BY p.idproducto, u.nombre, u.idubicacion, l.nombre_laboratorio, lt.stock_total, lt.lotes
+      GROUP BY p.idproducto, u.nombre, u.idubicacion, l.nombre_laboratorio, ff.nombre_forma, lt.stock_total, lt.lotes
       ORDER BY p.nombre
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `;
@@ -332,6 +352,8 @@ const productsService = {
           ubicacion_nombre: producto.ubicacion_nombre || "Sin ubicación",
           idlaboratorio: producto.idlaboratorio || 0,
           laboratorio_nombre: producto.laboratorio_nombre || "Sin laboratorio",
+          idforma_farmaceutica: producto.idforma_farmaceutica || 0,
+          forma_farmaceutica_nombre: producto.forma_farmaceutica_nombre || "Sin forma farmacéutica",
           categorias: producto.categorias || [],
           estado: producto.estado ?? 1,
           imagen: imagenBase64,
@@ -366,6 +388,8 @@ const productsService = {
         p.*,
         u.nombre as ubicacion_nombre,
         u.idubicacion,
+        l.nombre_laboratorio as laboratorio_nombre,
+        ff.nombre_forma as forma_farmaceutica_nombre,
         ARRAY_AGG(DISTINCT c.nombre) as categorias,
         ARRAY_AGG(DISTINCT tp.nombre) as tipos
       FROM productos p
@@ -374,8 +398,10 @@ const productsService = {
       LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria
       LEFT JOIN producto_tipos pt ON p.idproducto = pt.idproducto
       LEFT JOIN tipos tp ON pt.idtipo = tp.idtipo
+      LEFT JOIN laboratorios l ON p.idlaboratorio = l.idlaboratorio
+      LEFT JOIN forma_farmaceutica ff ON p.idforma_farmaceutica = ff.idforma_farmaceutica
       WHERE p.idproducto = $1 AND p.estado = 0
-      GROUP BY p.idproducto, u.nombre, u.idubicacion
+      GROUP BY p.idproducto, u.nombre, u.idubicacion, l.nombre_laboratorio, ff.nombre_forma
     `,
       [id],
     );
@@ -439,6 +465,12 @@ const productsService = {
       idubicacion: producto.idubicacion,
       ubicacion_nombre: producto.ubicacion_nombre,
       ubicacion: producto.ubicacion_nombre,
+      idlaboratorio: producto.idlaboratorio || 0,
+      laboratorio_nombre: producto.laboratorio_nombre || "Sin laboratorio",
+      laboratorio: producto.laboratorio_nombre || "Sin laboratorio",
+      idforma_farmaceutica: producto.idforma_farmaceutica || 0,
+      forma_farmaceutica_nombre: producto.forma_farmaceutica_nombre || "Sin forma farmacéutica",
+      forma_farmaceutica: producto.forma_farmaceutica_nombre || "Sin forma farmacéutica",
       categorias: producto.categorias?.filter((c) => c !== null) || [],
       estado: producto.estado,
       imagen: imagenBase64,
@@ -550,8 +582,8 @@ const productsService = {
       const productoResult = await client.query(
         `INSERT INTO productos (
           nombre, descripcion, idubicacion, imagen, 
-          precio_compra, precio_venta, idlaboratorio, stock_minimo, codigo_barras, estado
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0) RETURNING *`,
+          precio_compra, precio_venta, idlaboratorio, idforma_farmaceutica, stock_minimo, codigo_barras, estado
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 0) RETURNING *`,
         [
           productoData.nombre,
           productoData.descripcion,
@@ -560,6 +592,7 @@ const productsService = {
           productoData.precio_compra,
           productoData.precio_venta,
           productoData.idlaboratorio,
+          productoData.idforma_farmaceutica,
           productoData.stock_minimo || 0,
           productoData.codigo_barras || null,
         ],
@@ -674,7 +707,8 @@ const productsService = {
           precio_venta = $5, 
           stock_minimo = $6,
           codigo_barras = $7,
-          idlaboratorio = $8
+          idlaboratorio = $8,
+          idforma_farmaceutica = $9
       `;
 
       const queryParams = [
@@ -685,14 +719,15 @@ const productsService = {
         productoData.precio_venta,
         productoData.stock_minimo || 0,
         productoData.codigo_barras || null,
-        productoData.idlaboratorio
+        productoData.idlaboratorio,
+        productoData.idforma_farmaceutica,
       ];
 
       if (imagenBuffer) {
-        updateQuery += `, imagen = $9 WHERE idproducto = $10`;
+        updateQuery += `, imagen = $10 WHERE idproducto = $11`;
         queryParams.push(imagenBuffer, id);
       } else {
-        updateQuery += ` WHERE idproducto = $9`;
+        updateQuery += ` WHERE idproducto = $10`;
         queryParams.push(id);
       }
 
@@ -828,6 +863,126 @@ const productsService = {
     }
 
     return result.rows[0];
+  },
+
+  // Gestión de ubicaciones
+  createUbicacion: async (data) => {
+    const result = await query(
+      "INSERT INTO ubicaciones (nombre) VALUES ($1) RETURNING *",
+      [data.nombre]
+    );
+    return result.rows[0];
+  },
+
+  updateUbicacion: async (id, data) => {
+    const result = await query(
+      "UPDATE ubicaciones SET nombre = $1 WHERE idubicacion = $2 AND estado = 0 RETURNING *",
+      [data.nombre, id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error("Ubicación no encontrada");
+    }
+    return result.rows[0];
+  },
+
+  deleteUbicacion: async (id) => {
+    const result = await query(
+      "UPDATE ubicaciones SET estado = 1 WHERE idubicacion = $1 AND estado = 0 RETURNING *",
+      [id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error("Ubicación no encontrada");
+    }
+  },
+
+  // Gestión de categorías
+  createCategoria: async (data) => {
+    const result = await query(
+      "INSERT INTO categorias (nombre) VALUES ($1) RETURNING *",
+      [data.nombre]
+    );
+    return result.rows[0];
+  },
+
+  updateCategoria: async (id, data) => {
+    const result = await query(
+      "UPDATE categorias SET nombre = $1 WHERE idcategoria = $2 AND estado = 0 RETURNING *",
+      [data.nombre, id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error("Categoría no encontrada");
+    }
+    return result.rows[0];
+  },
+
+  deleteCategoria: async (id) => {
+    const result = await query(
+      "UPDATE categorias SET estado = 1 WHERE idcategoria = $1 AND estado = 0 RETURNING *",
+      [id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error("Categoría no encontrada");
+    }
+  },
+
+  // Gestión de laboratorios
+  createLaboratorio: async (data) => {
+    const result = await query(
+      "INSERT INTO laboratorios (nombre_laboratorio) VALUES ($1) RETURNING *",
+      [data.nombre]
+    );
+    return result.rows[0];
+  },
+
+  updateLaboratorio: async (id, data) => {
+    const result = await query(
+      "UPDATE laboratorios SET nombre_laboratorio = $1 WHERE idlaboratorio = $2 AND estado = 0 RETURNING *",
+      [data.nombre, id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error("Laboratorio no encontrado");
+    }
+    return result.rows[0];
+  },
+
+  deleteLaboratorio: async (id) => {
+    const result = await query(
+      "UPDATE laboratorios SET estado = 1 WHERE idlaboratorio = $1 AND estado = 0 RETURNING *",
+      [id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error("Laboratorio no encontrado");
+    }
+  },
+
+  // Gestión de formas farmacéuticas
+  createFormaFarmaceutica: async (data) => {
+    const result = await query(
+      "INSERT INTO forma_farmaceutica (nombre_forma) VALUES ($1) RETURNING *",
+      [data.nombre]
+    );
+    return result.rows[0];
+  },
+
+  updateFormaFarmaceutica: async (id, data) => {
+    const result = await query(
+      "UPDATE forma_farmaceutica SET nombre_forma = $1 WHERE idforma_farmaceutica = $2 AND estado = 0 RETURNING *",
+      [data.nombre, id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error("Forma farmacéutica no encontrada");
+    }
+    return result.rows[0];
+  },
+
+  deleteFormaFarmaceutica: async (id) => {
+    const result = await query(
+      "UPDATE forma_farmaceutica SET estado = 1 WHERE idforma_farmaceutica = $1 AND estado = 0 RETURNING *",
+      [id]
+    );
+    if (result.rows.length === 0) {
+      throw new Error("Forma farmacéutica no encontrada");
+    }
   },
 };
 

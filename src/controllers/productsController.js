@@ -21,6 +21,24 @@ const productsController = {
     }
   },
 
+  getLaboratorios: async (req, res) => {
+    try {
+      const laboratorios = await productsService.getLaboratorios();
+      res.json(laboratorios);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  getFormasFarmaceuticas: async (req, res) => {
+    try {
+      const formas = await productsService.getFormasFarmaceuticas();
+      res.json(formas);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
   // Obtener solo id y nombre para selects
   getTodosProductosSelect: async (req, res) => {
     try {
@@ -113,6 +131,7 @@ const productsController = {
         descripcion: req.body.descripcion,
         idubicacion: parseInt(req.body.idubicacion),
         idlaboratorio: parseInt(req.body.idlaboratorio),
+        idforma_farmaceutica: parseInt(req.body.idforma_farmaceutica),
         categorias: JSON.parse(req.body.categorias || "[]"),
         precio_compra: parseFloat(req.body.precio_compra || 0),
         precio_venta: parseFloat(req.body.precio_venta || 0),
@@ -149,6 +168,7 @@ const productsController = {
         descripcion: req.body.descripcion,
         idubicacion: parseInt(req.body.idubicacion),
         idlaboratorio: parseInt(req.body.idlaboratorio),
+        idforma_farmaceutica: parseInt(req.body.idforma_farmaceutica),
         categorias: JSON.parse(req.body.categorias || "[]"),
         precio_compra: parseFloat(req.body.precio_compra || 0),
         precio_venta: parseFloat(req.body.precio_venta || 0),
@@ -226,6 +246,126 @@ const productsController = {
         fecha_vencimiento,
       );
       return res.json(producto);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  // Gestión de ubicaciones
+  createUbicacion: async (req, res) => {
+    try {
+      const ubicacion = await productsService.createUbicacion(req.body);
+      res.status(201).json(ubicacion);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  updateUbicacion: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const ubicacion = await productsService.updateUbicacion(parseInt(id), req.body);
+      res.json(ubicacion);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  deleteUbicacion: async (req, res) => {
+    try {
+      const { id } = req.params;
+      await productsService.deleteUbicacion(parseInt(id));
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  // Gestión de categorías
+  createCategoria: async (req, res) => {
+    try {
+      const categoria = await productsService.createCategoria(req.body);
+      res.status(201).json(categoria);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  updateCategoria: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const categoria = await productsService.updateCategoria(parseInt(id), req.body);
+      res.json(categoria);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  deleteCategoria: async (req, res) => {
+    try {
+      const { id } = req.params;
+      await productsService.deleteCategoria(parseInt(id));
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  // Gestión de laboratorios
+  createLaboratorio: async (req, res) => {
+    try {
+      const laboratorio = await productsService.createLaboratorio(req.body);
+      res.status(201).json(laboratorio);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  updateLaboratorio: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const laboratorio = await productsService.updateLaboratorio(parseInt(id), req.body);
+      res.json(laboratorio);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  deleteLaboratorio: async (req, res) => {
+    try {
+      const { id } = req.params;
+      await productsService.deleteLaboratorio(parseInt(id));
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  // Gestión de formas farmacéuticas
+  createFormaFarmaceutica: async (req, res) => {
+    try {
+      const forma = await productsService.createFormaFarmaceutica(req.body);
+      res.status(201).json(forma);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  updateFormaFarmaceutica: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const forma = await productsService.updateFormaFarmaceutica(parseInt(id), req.body);
+      res.json(forma);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  deleteFormaFarmaceutica: async (req, res) => {
+    try {
+      const { id } = req.params;
+      await productsService.deleteFormaFarmaceutica(parseInt(id));
+      res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

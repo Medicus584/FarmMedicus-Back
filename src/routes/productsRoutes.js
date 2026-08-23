@@ -30,6 +30,7 @@ const upload = multer({
 // Rutas para opciones de selección
 router.get("/ubicaciones", productsController.getUbicaciones);
 router.get("/categorias", productsController.getCategorias);
+router.get("/formas-farmaceuticas", productsController.getFormasFarmaceuticas);
 
 // Rutas para productos
 router.get("/productos", productsController.getProductos); // Búsqueda por query param
@@ -52,5 +53,29 @@ router.delete("/productos/:id", productsController.deleteProducto);
 // Rutas para variantes
 router.put("/productos/:id/stock", productsController.updateStockProducto);
 router.post("/productos/:id/stock", productsController.addStockProducto);
+
+// Rutas para gestión de formas farmacéuticas
+router.get("/management/formas-farmaceuticas", productsController.getFormasFarmaceuticas);
+router.post("/management/formas-farmaceuticas", productsController.createFormaFarmaceutica);
+router.put("/management/formas-farmaceuticas/:id", productsController.updateFormaFarmaceutica);
+router.delete("/management/formas-farmaceuticas/:id", productsController.deleteFormaFarmaceutica);
+
+// Rutas para gestión de ubicaciones
+router.get("/management/ubicaciones", productsController.getUbicaciones);
+router.post("/management/ubicaciones", productsController.createUbicacion);
+router.put("/management/ubicaciones/:id", productsController.updateUbicacion);
+router.delete("/management/ubicaciones/:id", productsController.deleteUbicacion);
+
+// Rutas para gestión de categorías
+router.get("/management/categorias", productsController.getCategorias);
+router.post("/management/categorias", productsController.createCategoria);
+router.put("/management/categorias/:id", productsController.updateCategoria);
+router.delete("/management/categorias/:id", productsController.deleteCategoria);
+
+// Rutas para gestión de laboratorios
+router.get("/management/laboratorios", productsController.getLaboratorios);
+router.post("/management/laboratorio", productsController.createLaboratorio);
+router.put("/management/laboratorio/:id", productsController.updateLaboratorio);
+router.delete("/management/laboratorio/:id", productsController.deleteLaboratorio);
 
 module.exports = router;
