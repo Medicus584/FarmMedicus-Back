@@ -41,6 +41,7 @@ const getInventory = async (searchTerm = null, lowMarginOnly = false, categories
 
     if (searchTerm) {
       paramCount++;
+      // Búsqueda por nombre O descripción (ILIKE para búsqueda insensible a mayúsculas)
       sqlQuery += ` AND (p.nombre ILIKE $${paramCount} OR p.descripcion ILIKE $${paramCount})`;
       params.push(`%${searchTerm}%`);
     }
