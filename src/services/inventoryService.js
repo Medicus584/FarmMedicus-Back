@@ -1,3 +1,4 @@
+// src/services/inventoryService.js
 const { query } = require("../../db");
 
 const getInventory = async (searchTerm = null, lowMarginOnly = false, categories = [], types = []) => {
@@ -6,6 +7,7 @@ const getInventory = async (searchTerm = null, lowMarginOnly = false, categories
       SELECT DISTINCT
         p.idproducto,
         p.nombre as nombre_producto,
+        p.descripcion,
         p.precio_compra,
         p.precio_venta,
         p.stock_minimo,
@@ -39,7 +41,7 @@ const getInventory = async (searchTerm = null, lowMarginOnly = false, categories
 
     if (searchTerm) {
       paramCount++;
-      sqlQuery += ` AND p.nombre ILIKE $${paramCount}`;
+      sqlQuery += ` AND (p.nombre ILIKE $${paramCount} OR p.descripcion ILIKE $${paramCount})`;
       params.push(`%${searchTerm}%`);
     }
 
@@ -50,7 +52,7 @@ const getInventory = async (searchTerm = null, lowMarginOnly = false, categories
       `;
     }
 
-    if (categories.length > 0) {
+    if (categories && categories.length > 0) {
       paramCount++;
       const placeholders = categories.map((_, index) => `$${paramCount + index}`).join(',');
       sqlQuery += ` AND pc.idcategoria IN (${placeholders})`;

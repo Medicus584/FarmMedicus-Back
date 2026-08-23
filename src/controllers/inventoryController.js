@@ -1,3 +1,4 @@
+// src/controllers/inventoryController.js
 const inventoryService = require("../services/inventoryService");
 
 const getInventory = async (req, res) => {
