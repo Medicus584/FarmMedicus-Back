@@ -35,17 +35,22 @@ const productsService = {
       `
       SELECT COUNT(DISTINCT p.idproducto) as total
       FROM productos p
-      LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
-      LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria
-      LEFT JOIN producto_tipos pt ON p.idproducto = pt.idproducto
-      LEFT JOIN tipos tp ON pt.idtipo = tp.idtipo
-      LEFT JOIN laboratorios l ON l.idlaboratorio = p.idlaboratorio
       WHERE p.estado = 0 
     `,
       [],
     );
 
     const total = parseInt(countResult.rows[0].total, 10);
+
+    if (total === 0) {
+      return {
+        productos: [],
+        total: 0,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: 0,
+      };
+    }
 
     const result = await query(
       `
@@ -167,8 +172,8 @@ const productsService = {
     return {
       productos,
       total,
-      page,
-      limit,
+      page: parseInt(page),
+      limit: parseInt(limit),
       totalPages: Math.ceil(total / limit),
     };
   },
@@ -176,46 +181,75 @@ const productsService = {
   buscarProductos: async (termino, categoria, laboratorio, page = 1, limit = 20) => {
     const offset = (page - 1) * limit;
 
-    const countResult = await query(
-      `
+    let whereClause = 'p.estado = 0';
+    const params = [];
+    let paramIndex = 1;
+
+    if (termino && termino.trim().length >= 2) {
+      const searchTerm = `%${termino.trim()}%`;
+      whereClause += ` AND (
+        p.nombre ILIKE $${paramIndex} OR 
+        p.descripcion ILIKE $${paramIndex} OR 
+        p.codigo_barras ILIKE $${paramIndex}
+      )`;
+      params.push(searchTerm);
+      paramIndex++;
+    }
+
+    if (categoria) {
+      whereClause += ` AND EXISTS (
+        SELECT 1 FROM producto_categorias pc 
+        JOIN categorias c ON pc.idcategoria = c.idcategoria 
+        WHERE pc.idproducto = p.idproducto AND c.nombre = $${paramIndex}
+      )`;
+      params.push(categoria);
+      paramIndex++;
+    }
+
+    if (laboratorio) {
+      whereClause += ` AND EXISTS (
+        SELECT 1 FROM laboratorios l 
+        WHERE l.idlaboratorio = p.idlaboratorio AND l.nombre_laboratorio = $${paramIndex}
+      )`;
+      params.push(laboratorio);
+      paramIndex++;
+    }
+
+    const countQuery = `
       SELECT COUNT(DISTINCT p.idproducto) as total
       FROM productos p
-      LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
-      LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria
-      LEFT JOIN producto_tipos pt ON p.idproducto = pt.idproducto
-      LEFT JOIN tipos tp ON pt.idtipo = tp.idtipo
-      LEFT JOIN laboratorios l ON l.idlaboratorio = p.idlaboratorio
-      WHERE p.estado = 0 
-        AND (
-              (p.nombre ILIKE $1 OR p.descripcion ILIKE $1 
-              OR c.nombre ILIKE $1 OR tp.nombre ILIKE $1
-              OR p.codigo_barras ILIKE $1)
-              OR (c.nombre LIKE $2)
-              OR (l.nombre_laboratorio LIKE $3)
-            )
-    `,
-      [`%${termino}%`, categoria, laboratorio],
-    );
+      WHERE ${whereClause}
+    `;
 
+    const countResult = await query(countQuery, params);
     const total = parseInt(countResult.rows[0].total, 10);
 
-    const result = await query(
-      `
+    if (total === 0) {
+      return {
+        productos: [],
+        total: 0,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: 0,
+      };
+    }
+
+    params.push(parseInt(limit));
+    params.push(parseInt(offset));
+
+    const querySQL = `
       SELECT 
         p.*,
         u.nombre as ubicacion_nombre,
         u.idubicacion,
         l.nombre_laboratorio as laboratorio_nombre,
         ARRAY_AGG(DISTINCT c.nombre) FILTER (WHERE c.nombre IS NOT NULL) as categorias,
-        ARRAY_AGG(DISTINCT tp.nombre) FILTER (WHERE tp.nombre IS NOT NULL) as tipos,
         COALESCE(lt.stock_total, 0) as stock_total,
         COALESCE(lt.lotes, '[]'::jsonb) as lotes
       FROM productos p
       LEFT JOIN ubicaciones u ON p.idubicacion = u.idubicacion
       LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
       LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria
-      LEFT JOIN producto_tipos pt ON p.idproducto = pt.idproducto
-      LEFT JOIN tipos tp ON pt.idtipo = tp.idtipo
       LEFT JOIN laboratorios l ON p.idlaboratorio = l.idlaboratorio
       LEFT JOIN LATERAL (
         SELECT 
@@ -235,20 +269,13 @@ const productsService = {
             OR lo.fecha_vencimiento IS NULL
           )
       ) lt ON true
-      WHERE p.estado = 0 
-        AND (
-              (p.nombre ILIKE $1 OR p.descripcion ILIKE $1 
-              OR c.nombre ILIKE $1 OR tp.nombre ILIKE $1
-              OR p.codigo_barras ILIKE $1)
-              OR (c.nombre LIKE $4)
-              OR (l.nombre_laboratorio LIKE $5)
-            )
+      WHERE ${whereClause}
       GROUP BY p.idproducto, u.nombre, u.idubicacion, l.nombre_laboratorio, lt.stock_total, lt.lotes
       ORDER BY p.nombre
-      LIMIT $2 OFFSET $3
-    `,
-      [`%${termino}%`, limit, offset, categoria, laboratorio],
-    );
+      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+    `;
+
+    const result = await query(querySQL, params);
 
     const productos = await Promise.all(
       result.rows.map(async (producto) => {
@@ -326,8 +353,8 @@ const productsService = {
     return {
       productos,
       total,
-      page,
-      limit,
+      page: parseInt(page),
+      limit: parseInt(limit),
       totalPages: Math.ceil(total / limit),
     };
   },
@@ -373,11 +400,9 @@ const productsService = {
       }
     }
 
-    // Obtener productos similares (con relaciones transitivas)
     const similaresResult = await query(
       `
       WITH RECURSIVE similar_products AS (
-        -- Relaciones directas
         SELECT DISTINCT 
           CASE 
             WHEN idproducto = $1::integer THEN idproducto_similar
@@ -388,7 +413,6 @@ const productsService = {
         
         UNION
         
-        -- Relaciones transitivas
         SELECT DISTINCT
           CASE 
             WHEN ps.idproducto = sp.idproducto_relacionado THEN ps.idproducto_similar
@@ -411,7 +435,7 @@ const productsService = {
     const productoProcesado = {
       idproducto: producto.idproducto,
       nombre: producto.nombre,
-      descripcion: producto.descripcion,
+      descripcion: producto.descripcion || '',
       idubicacion: producto.idubicacion,
       ubicacion_nombre: producto.ubicacion_nombre,
       ubicacion: producto.ubicacion_nombre,
@@ -420,7 +444,6 @@ const productsService = {
       imagen: imagenBase64,
       precio_venta: producto.precio_venta,
       precio_compra: producto.precio_compra,
-      stock: producto.stock,
       stock_minimo: producto.stock_minimo,
       codigo_barras: producto.codigo_barras,
       productos_similares: similaresResult.rows,
@@ -429,50 +452,36 @@ const productsService = {
     return productoProcesado;
   },
 
-  // Función para crear relaciones transitivas completas
   crearRelacionesTransitivas: async (client, productoIds) => {
     if (!productoIds || productoIds.length < 2) return;
 
-    // Eliminar duplicados y asegurar que sean números
     const idsUnicos = [...new Set(productoIds.map((id) => parseInt(id)))];
 
-    console.log(
-      `Creando relaciones transitivas para los IDs: ${idsUnicos.join(", ")}`,
-    );
-
-    // Crear todas las combinaciones posibles entre los productos (grafo completo)
     for (let i = 0; i < idsUnicos.length; i++) {
       for (let j = i + 1; j < idsUnicos.length; j++) {
         const id1 = idsUnicos[i];
         const id2 = idsUnicos[j];
 
         if (id1 !== id2) {
-          // Verificar si la relación ya existe
           const existe = await client.query(
             "SELECT 1 FROM productos_similares WHERE (idproducto = $1 AND idproducto_similar = $2) OR (idproducto = $2 AND idproducto_similar = $1)",
             [id1, id2],
           );
 
           if (existe.rows.length === 0) {
-            // Insertar relación bidireccional
             await client.query(
               "INSERT INTO productos_similares (idproducto, idproducto_similar) VALUES ($1, $2), ($2, $1)",
               [id1, id2],
             );
-            console.log(`Relación creada entre ${id1} y ${id2}`);
-          } else {
-            console.log(`Relación ya existente entre ${id1} y ${id2}`);
           }
         }
       }
     }
   },
 
-  // Función para obtener todos los productos relacionados en un grupo
   obtenerGrupoCompleto: async (client, productoId) => {
     const id = parseInt(productoId);
 
-    // Obtener todas las relaciones donde participe este producto
     const result = await client.query(
       `
       SELECT DISTINCT idproducto, idproducto_similar
@@ -482,7 +491,6 @@ const productsService = {
       [id],
     );
 
-    // Recopilar todos los IDs únicos del grupo
     const idsRelacionados = new Set();
     idsRelacionados.add(id);
 
@@ -491,7 +499,6 @@ const productsService = {
       idsRelacionados.add(row.idproducto_similar);
     }
 
-    // Para cada nuevo ID, buscar más relaciones (profundidad)
     let hayCambios = true;
     while (hayCambios) {
       hayCambios = false;
@@ -520,13 +527,7 @@ const productsService = {
       }
     }
 
-    // Remover el producto original del resultado
-    const resultado = Array.from(idsRelacionados).filter(
-      (idItem) => idItem !== id,
-    );
-    console.log(`Grupo completo para producto ${id}: ${resultado.join(", ")}`);
-
-    return resultado;
+    return Array.from(idsRelacionados).filter((idItem) => idItem !== id);
   },
 
   createProducto: async (productoData, imagenFile) => {
@@ -616,7 +617,6 @@ const productsService = {
         );
       }
 
-      // Crear relaciones transitivas completas
       if (
         productoData.productos_similares &&
         productoData.productos_similares.length > 0
@@ -645,7 +645,6 @@ const productsService = {
     try {
       await client.query("BEGIN");
 
-      // Verificar que el producto existe
       const productoExistente = await client.query(
         "SELECT * FROM productos WHERE idproducto = $1 AND estado = 0",
         [id],
@@ -666,7 +665,6 @@ const productsService = {
         }
       }
 
-      // Construir la consulta de actualización
       let updateQuery = `
         UPDATE productos SET 
           nombre = $1, 
@@ -700,7 +698,6 @@ const productsService = {
 
       await client.query(updateQuery, queryParams);
 
-      // Actualizar categorías (eliminar existentes y insertar nuevas)
       await client.query(
         "DELETE FROM producto_categorias WHERE idproducto = $1",
         [id],
@@ -760,14 +757,12 @@ const productsService = {
         );
       }
 
-      // Obtener el grupo completo de productos relacionados actualmente
       const grupoActual = await productsService.obtenerGrupoCompleto(
         client,
         id,
       );
       const todosIdsActuales = [id, ...grupoActual];
 
-      // Eliminar todas las relaciones existentes del grupo completo
       for (const productoId of todosIdsActuales) {
         await client.query(
           "DELETE FROM productos_similares WHERE idproducto = $1 OR idproducto_similar = $1",
@@ -775,11 +770,6 @@ const productsService = {
         );
       }
 
-      console.log(
-        `Eliminadas relaciones para el grupo: ${todosIdsActuales.join(", ")}`,
-      );
-
-      // Crear nuevas relaciones con los productos similares seleccionados
       if (
         productoData.productos_similares &&
         productoData.productos_similares.length > 0
@@ -800,7 +790,6 @@ const productsService = {
   },
 
   deleteProducto: async (id) => {
-    // Soft delete - marcar como eliminado
     const result = await query(
       "UPDATE productos SET estado = 1 WHERE idproducto = $1",
       [id],

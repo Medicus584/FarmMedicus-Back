@@ -31,7 +31,7 @@ const productsController = {
     }
   },
 
-  // CRUD de productos - MODIFICADO para búsqueda
+  // CRUD de productos
   getProductos: async (req, res) => {
     try {
       const { termino } = req.query;
@@ -53,10 +53,20 @@ const productsController = {
   getTodosProductos: async (req, res) => {
     try {
       const { page, limit } = req.query;
-      const productos = await productsService.getTodosProductos(page, limit);
+      const productos = await productsService.getTodosProductos(
+        parseInt(page) || 1,
+        parseInt(limit) || 15
+      );
       res.json(productos);
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      console.error("Error en getTodosProductos:", error);
+      res.json({
+        productos: [],
+        total: 0,
+        page: 1,
+        limit: 15,
+        totalPages: 0
+      });
     }
   },
 
@@ -64,14 +74,25 @@ const productsController = {
   buscarProductos: async (req, res) => {
     try {
       const { termino, categoria, laboratorio, page, limit } = req.query;
-      if (!termino || termino.trim().length < 2) {
-        return res.json([]);
-      }
-
-      const productos = await productsService.buscarProductos(termino, categoria, laboratorio, page, limit);
+      
+      const productos = await productsService.buscarProductos(
+        termino || '',
+        categoria || '',
+        laboratorio || '',
+        parseInt(page) || 1,
+        parseInt(limit) || 20
+      );
+      
       res.json(productos);
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      console.error("Error en buscarProductos:", error);
+      res.json({
+        productos: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+        totalPages: 0
+      });
     }
   },
 
