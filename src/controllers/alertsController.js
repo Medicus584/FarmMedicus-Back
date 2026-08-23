@@ -1,8 +1,18 @@
+// src/controllers/alertsController.js
 const alertsService = require("../services/alertsService");
 
 const getLowStockAlerts = async (req, res) => {
   try {
-    const lowStockProducts = await alertsService.getLowStockAlerts();
+    const { search, prioridad, page, limit } = req.query;
+    
+    const filters = {
+      search: search || undefined,
+      prioridad: prioridad || undefined,
+      page: parseInt(page) || 1,
+      limit: parseInt(limit) || 15
+    };
+    
+    const lowStockProducts = await alertsService.getLowStockAlerts(filters);
     res.json(lowStockProducts);
   } catch (error) {
     console.error("Error en getLowStockAlerts:", error);
@@ -15,7 +25,16 @@ const getLowStockAlerts = async (req, res) => {
 
 const getExpirationAlerts = async (req, res) => {
   try {
-    const expirationProducts = await alertsService.getExpirationAlerts();
+    const { search, prioridad, page, limit } = req.query;
+    
+    const filters = {
+      search: search || undefined,
+      prioridad: prioridad || undefined,
+      page: parseInt(page) || 1,
+      limit: parseInt(limit) || 15
+    };
+    
+    const expirationProducts = await alertsService.getExpirationAlerts(filters);
     res.json(expirationProducts);
   } catch (error) {
     console.error("Error en getExpirationAlerts:", error);
