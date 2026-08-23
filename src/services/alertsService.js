@@ -101,7 +101,11 @@ const getExpirationAlerts = async (filters = {}) => {
       INNER JOIN productos p ON l.idproducto = p.idproducto
       LEFT JOIN ubicaciones u ON p.idubicacion = u.idubicacion
       LEFT JOIN laboratorios lab ON p.idlaboratorio = lab.idlaboratorio
-      WHERE l.estado = 0 AND p.estado = 0 AND l.stock > 0 AND l.fecha_vencimiento >= CURRENT_DATE
+      WHERE l.estado = 0 
+        AND p.estado = 0 
+        AND l.stock > 0 
+        AND l.fecha_vencimiento >= CURRENT_DATE
+        AND (l.fecha_vencimiento - CURRENT_DATE) <= 365
     `;
 
     const params = [];
@@ -113,7 +117,6 @@ const getExpirationAlerts = async (filters = {}) => {
       paramCount++;
     }
 
-    // CORREGIDO: Usando días exactos
     // Rojo: 0 a 6 meses (0 a 180 días)
     // Amarillo: 7 a 9 meses (181 a 270 días)
     // Verde: 10 a 12 meses (271 a 365 días)
