@@ -47,7 +47,12 @@ const productsService = {
     queryStr += ` ORDER BY nombre LIMIT 50`;
     
     const result = await query(queryStr, params);
-    return result.rows;
+    
+    return result.rows.map(row => ({
+      idproducto: row.idproducto,
+      nombre: row.nombre || 'Sin nombre',
+      descripcion: row.descripcion || ''
+    }));
   },
 
   getProductoByCodigoP: async (codigoP) => {

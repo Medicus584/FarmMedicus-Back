@@ -44,30 +44,31 @@ const productsController = {
       const productos = await productsService.getTodosProductosSelect(search || '');
       res.json(productos);
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      console.error("Error en getTodosProductosSelect:", error);
+      res.json([]);
     }
   },
 
   getProductoByCodigoP: async (req, res) => {
     try {
       const { codigoP } = req.params;
-      
+
       if (!codigoP || codigoP.trim() === '') {
         return res.status(400).json({ error: "Código de producto requerido" });
       }
-      
+
       const producto = await productsService.getProductoByCodigoP(codigoP);
-      
+
       if (!producto) {
-        return res.status(404).json({ 
+        return res.status(404).json({
           exists: false,
-          message: "Producto no encontrado" 
+          message: "Producto no encontrado"
         });
       }
-      
-      res.json({ 
+
+      res.json({
         exists: true,
-        producto 
+        producto
       });
     } catch (error) {
       console.error("Error buscando producto por código:", error);
@@ -115,7 +116,7 @@ const productsController = {
   buscarProductos: async (req, res) => {
     try {
       const { termino, categoria, laboratorio, page, limit } = req.query;
-      
+
       const productos = await productsService.buscarProductos(
         termino || '',
         categoria || '',
@@ -123,7 +124,7 @@ const productsController = {
         parseInt(page) || 1,
         parseInt(limit) || 20
       );
-      
+
       res.json(productos);
     } catch (error) {
       console.error("Error en buscarProductos:", error);
@@ -181,9 +182,9 @@ const productsController = {
     } catch (error) {
       console.error("Error creating producto:", error);
       if (error.message.includes("Ya existe un producto con el código")) {
-        return res.status(409).json({ 
+        return res.status(409).json({
           error: error.message,
-          code: "DUPLICATE_CODE" 
+          code: "DUPLICATE_CODE"
         });
       }
       res.status(500).json({ error: error.message });
@@ -226,9 +227,9 @@ const productsController = {
     } catch (error) {
       console.error("Error updating producto:", error);
       if (error.message.includes("Ya existe otro producto con el código")) {
-        return res.status(409).json({ 
+        return res.status(409).json({
           error: error.message,
-          code: "DUPLICATE_CODE" 
+          code: "DUPLICATE_CODE"
         });
       }
       res.status(500).json({ error: error.message });
@@ -250,7 +251,7 @@ const productsController = {
       const { id } = req.params;
       const { cantidad, idlote } = req.body;
       if (cantidad <= 0)
-        return res.status(400).json({ error: "el stock no puede ser 0 o menor"});
+        return res.status(400).json({ error: "el stock no puede ser 0 o menor" });
       const producto = await productsService.updateStockProducto(
         parseInt(id),
         cantidad,
@@ -267,15 +268,15 @@ const productsController = {
       const { id } = req.params;
       const { cantidad, fecha_vencimiento } = req.body;
       if (cantidad <= 0)
-        res.status(400).json({ error: "El stock no puede ser 0 o menor"});
+        res.status(400).json({ error: "El stock no puede ser 0 o menor" });
 
       const fechaVencimientoDate = new Date(fecha_vencimiento);
       const fechaActual = new Date();
       fechaActual.setHours(0, 0, 0, 0);
       fechaVencimientoDate.setHours(0, 0, 0, 0);
-      
+
       if (fechaVencimientoDate < fechaActual) {
-        return res.status(400).json({ error: "La fecha de vencimiento no puede ser anterior a la fecha actual"})
+        return res.status(400).json({ error: "La fecha de vencimiento no puede ser anterior a la fecha actual" })
       }
 
       const producto = await productsService.addStockProducto(
