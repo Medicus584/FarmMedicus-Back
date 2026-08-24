@@ -40,7 +40,8 @@ const productsController = {
 
   getTodosProductosSelect: async (req, res) => {
     try {
-      const productos = await productsService.getTodosProductosSelect();
+      const { search } = req.query;
+      const productos = await productsService.getTodosProductosSelect(search || '');
       res.json(productos);
     } catch (error) {
       res.status(500).json({ error: error.message });

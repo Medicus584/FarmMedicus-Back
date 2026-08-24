@@ -31,13 +31,22 @@ const productsService = {
     return result.rows;
   },
 
-  getTodosProductosSelect: async () => {
-    const result = await query(`
-      SELECT idproducto, nombre 
+  getTodosProductosSelect: async (searchTerm = '') => {
+    let queryStr = `
+      SELECT idproducto, nombre, descripcion 
       FROM productos 
       WHERE estado = 0 
-      ORDER BY nombre
-    `);
+    `;
+    const params = [];
+    
+    if (searchTerm && searchTerm.trim().length >= 2) {
+      queryStr += ` AND (nombre ILIKE $1 OR descripcion ILIKE $1)`;
+      params.push(`%${searchTerm.trim()}%`);
+    }
+    
+    queryStr += ` ORDER BY nombre LIMIT 50`;
+    
+    const result = await query(queryStr, params);
     return result.rows;
   },
 
