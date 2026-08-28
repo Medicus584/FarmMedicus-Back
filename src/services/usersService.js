@@ -109,10 +109,49 @@ const toggleUsuarioStatus = async (id) => {
   return result.rows[0];
 };
 
+// NUEVA FUNCIÓN: Cambiar contraseña del usuario logueado
+const changePassword = async (userId, currentPassword, newPassword) => {
+  try {
+    // Obtener el usuario con su contraseña actual
+    const result = await query(
+      `SELECT idusuario, contraseña FROM usuarios WHERE idusuario = $1 AND estado IN (0, 1)`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error("Usuario no encontrado");
+    }
+
+    const user = result.rows[0];
+
+    // Verificar que la contraseña actual sea correcta
+    const isMatch = await bcrypt.compare(currentPassword, user.contraseña);
+
+    if (!isMatch) {
+      throw new Error("Contraseña actual incorrecta");
+    }
+
+    // Hash de la nueva contraseña
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Actualizar la contraseña
+    await query(
+      `UPDATE usuarios SET contraseña = $1 WHERE idusuario = $2`,
+      [hashedPassword, userId]
+    );
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error en usersService.changePassword:", error);
+    throw error;
+  }
+};
+
 module.exports = {
   getUsuarios,
   createUsuario,
   updateUsuario,
   deleteUsuario,
   toggleUsuarioStatus,
+  changePassword,
 };
