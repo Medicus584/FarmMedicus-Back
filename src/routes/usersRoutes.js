@@ -10,7 +10,7 @@ router.put("/:id", authenticate, usersController.updateUsuario);
 router.delete("/:id", authenticate, usersController.deleteUsuario);
 router.patch("/:id/toggle-status", authenticate, usersController.toggleUsuarioStatus);
 
-// NUEVA RUTA: Cambiar contraseña del usuario logueado
+// Ruta para cambiar contraseña del usuario logueado
 router.post("/change-password", authenticate, usersController.changePassword);
 
 module.exports = router;

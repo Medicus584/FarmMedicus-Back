@@ -26,7 +26,7 @@ const createUsuario = async (usuarioData) => {
 
   const result = await query(
     `INSERT INTO usuarios (nombres, apellidos, telefono, usuario, contraseña, rol, estado) 
-     VALUES ($1, $2, $3, $4, $5, $6, 1) 
+     VALUES ($1, $2, $3, $4, $5, $6, 0)  -- estado 0 = activo por defecto
      RETURNING idusuario, nombres, apellidos, telefono, usuario, rol, estado`,
     [nombres, apellidos, telefono, usuario, hashedPassword, rol]
   );
@@ -94,9 +94,10 @@ const deleteUsuario = async (id) => {
 };
 
 const toggleUsuarioStatus = async (id) => {
+  // CORREGIDO: estado 0 = activo, estado 1 = inactivo
   const result = await query(
     `UPDATE usuarios 
-     SET estado = CASE WHEN estado = 1 THEN 0 ELSE 1 END 
+     SET estado = CASE WHEN estado = 0 THEN 1 ELSE 0 END 
      WHERE idusuario = $1 AND estado IN (0, 1)
      RETURNING idusuario, nombres, apellidos, telefono, usuario, rol, estado`,
     [id]
@@ -109,7 +110,7 @@ const toggleUsuarioStatus = async (id) => {
   return result.rows[0];
 };
 
-// NUEVA FUNCIÓN: Cambiar contraseña del usuario logueado
+// Función para cambiar contraseña del usuario logueado
 const changePassword = async (userId, currentPassword, newPassword) => {
   try {
     // Obtener el usuario con su contraseña actual
