@@ -4,8 +4,8 @@ const { query } = require("../../db");
 exports.getTransaccionesCaja = async () => {
   const result = await query(
     `SELECT 
-      tc.idtransaccion,
-      tc.idestado_caja,
+      tc.idtransaccion_caja as idtransaccion,
+      tc.idcaja,
       tc.tipo_movimiento,
       tc.descripcion,
       tc.monto,
@@ -13,8 +13,10 @@ exports.getTransaccionesCaja = async () => {
       tc.idusuario,
       tc.idventa,
       u.nombres,
-      u.apellidos
-     FROM transacciones_caja tc
+      u.apellidos,
+      tc.monto_anterior,
+      tc.monto_nuevo
+     FROM transaccion_caja tc
      JOIN usuarios u ON tc.idusuario = u.idusuario
      ORDER BY tc.fecha DESC`
   );
@@ -24,8 +26,8 @@ exports.getTransaccionesCaja = async () => {
 exports.getTransaccionesCajaByFecha = async (fecha) => {
   const result = await query(
     `SELECT 
-      tc.idtransaccion,
-      tc.idestado_caja,
+      tc.idtransaccion_caja as idtransaccion,
+      tc.idcaja,
       tc.tipo_movimiento,
       tc.descripcion,
       tc.monto,
@@ -33,8 +35,10 @@ exports.getTransaccionesCajaByFecha = async (fecha) => {
       tc.idusuario,
       tc.idventa,
       u.nombres,
-      u.apellidos
-     FROM transacciones_caja tc
+      u.apellidos,
+      tc.monto_anterior,
+      tc.monto_nuevo
+     FROM transaccion_caja tc
      JOIN usuarios u ON tc.idusuario = u.idusuario
      WHERE DATE(tc.fecha) = $1
      ORDER BY tc.fecha DESC`,
@@ -46,8 +50,8 @@ exports.getTransaccionesCajaByFecha = async (fecha) => {
 exports.getTransaccionesCajaByRango = async (fechaInicio, fechaFin) => {
   const result = await query(
     `SELECT 
-      tc.idtransaccion,
-      tc.idestado_caja,
+      tc.idtransaccion_caja as idtransaccion,
+      tc.idcaja,
       tc.tipo_movimiento,
       tc.descripcion,
       tc.monto,
@@ -55,8 +59,10 @@ exports.getTransaccionesCajaByRango = async (fechaInicio, fechaFin) => {
       tc.idusuario,
       tc.idventa,
       u.nombres,
-      u.apellidos
-     FROM transacciones_caja tc
+      u.apellidos,
+      tc.monto_anterior,
+      tc.monto_nuevo
+     FROM transaccion_caja tc
      JOIN usuarios u ON tc.idusuario = u.idusuario
      WHERE DATE(tc.fecha) BETWEEN $1 AND $2
      ORDER BY tc.fecha DESC`,
@@ -68,8 +74,8 @@ exports.getTransaccionesCajaByRango = async (fechaInicio, fechaFin) => {
 exports.getTransaccionesCajaByUsuario = async (idusuario) => {
   const result = await query(
     `SELECT 
-      tc.idtransaccion,
-      tc.idestado_caja,
+      tc.idtransaccion_caja as idtransaccion,
+      tc.idcaja,
       tc.tipo_movimiento,
       tc.descripcion,
       tc.monto,
@@ -77,8 +83,10 @@ exports.getTransaccionesCajaByUsuario = async (idusuario) => {
       tc.idusuario,
       tc.idventa,
       u.nombres,
-      u.apellidos
-     FROM transacciones_caja tc
+      u.apellidos,
+      tc.monto_anterior,
+      tc.monto_nuevo
+     FROM transaccion_caja tc
      JOIN usuarios u ON tc.idusuario = u.idusuario
      WHERE tc.idusuario = $1
      ORDER BY tc.fecha DESC`,
@@ -90,8 +98,8 @@ exports.getTransaccionesCajaByUsuario = async (idusuario) => {
 exports.getTransaccionesCajaByUsuarioFecha = async (idusuario, fecha) => {
   const result = await query(
     `SELECT 
-      tc.idtransaccion,
-      tc.idestado_caja,
+      tc.idtransaccion_caja as idtransaccion,
+      tc.idcaja,
       tc.tipo_movimiento,
       tc.descripcion,
       tc.monto,
@@ -99,8 +107,10 @@ exports.getTransaccionesCajaByUsuarioFecha = async (idusuario, fecha) => {
       tc.idusuario,
       tc.idventa,
       u.nombres,
-      u.apellidos
-     FROM transacciones_caja tc
+      u.apellidos,
+      tc.monto_anterior,
+      tc.monto_nuevo
+     FROM transaccion_caja tc
      JOIN usuarios u ON tc.idusuario = u.idusuario
      WHERE tc.idusuario = $1 AND DATE(tc.fecha) = $2
      ORDER BY tc.fecha DESC`,
@@ -112,8 +122,8 @@ exports.getTransaccionesCajaByUsuarioFecha = async (idusuario, fecha) => {
 exports.getTransaccionesCajaByUsuarioRango = async (idusuario, fechaInicio, fechaFin) => {
   const result = await query(
     `SELECT 
-      tc.idtransaccion,
-      tc.idestado_caja,
+      tc.idtransaccion_caja as idtransaccion,
+      tc.idcaja,
       tc.tipo_movimiento,
       tc.descripcion,
       tc.monto,
@@ -121,8 +131,10 @@ exports.getTransaccionesCajaByUsuarioRango = async (idusuario, fechaInicio, fech
       tc.idusuario,
       tc.idventa,
       u.nombres,
-      u.apellidos
-     FROM transacciones_caja tc
+      u.apellidos,
+      tc.monto_anterior,
+      tc.monto_nuevo
+     FROM transaccion_caja tc
      JOIN usuarios u ON tc.idusuario = u.idusuario
      WHERE tc.idusuario = $1 AND DATE(tc.fecha) BETWEEN $2 AND $3
      ORDER BY tc.fecha DESC`,
@@ -134,13 +146,12 @@ exports.getTransaccionesCajaByUsuarioRango = async (idusuario, fechaInicio, fech
 exports.getEstadoCajaActual = async () => {
   const result = await query(
     `SELECT 
-      idestado_caja,
-      estado,
-      monto_inicial,
-      monto_final,
-      idusuario
-     FROM estado_caja 
-     ORDER BY idestado_caja DESC 
+      idcaja,
+      nombre_caja,
+      total as monto_final,
+      estado
+     FROM caja 
+     ORDER BY idcaja DESC 
      LIMIT 1`
   );
   
@@ -148,7 +159,13 @@ exports.getEstadoCajaActual = async () => {
     return null;
   }
   
-  return result.rows[0];
+  return {
+    idestado_caja: result.rows[0].idcaja,
+    estado: result.rows[0].estado,
+    monto_inicial: 0,
+    monto_final: parseFloat(result.rows[0].monto_final),
+    idusuario: null
+  };
 };
 
 exports.getSaldoActual = async () => {
@@ -156,9 +173,9 @@ exports.getSaldoActual = async () => {
     const result = await query(
       `SELECT 
         estado,
-        monto_final
-       FROM estado_caja 
-       ORDER BY idestado_caja DESC 
+        total as monto_final
+       FROM caja 
+       ORDER BY idcaja DESC 
        LIMIT 1`
     );
 
@@ -169,7 +186,10 @@ exports.getSaldoActual = async () => {
       };
     }
 
-    return result.rows[0];
+    return {
+      estado: result.rows[0].estado,
+      monto_final: parseFloat(result.rows[0].monto_final).toFixed(2)
+    };
   } catch (error) {
     console.error("Error in getSaldoActual service:", error);
     return {
@@ -183,7 +203,7 @@ exports.getUsuariosCaja = async () => {
   const result = await query(
     `SELECT DISTINCT 
       CONCAT(u.nombres, ' ', u.apellidos) as empleado_nombre
-     FROM transacciones_caja tc
+     FROM transaccion_caja tc
      JOIN usuarios u ON tc.idusuario = u.idusuario
      WHERE u.estado = 0
      ORDER BY empleado_nombre`
@@ -192,20 +212,20 @@ exports.getUsuariosCaja = async () => {
 };
 
 exports.createTransaccionCaja = async (transaccionData) => {
-  const { idestado_caja, tipo_movimiento, descripcion, monto, idusuario, idventa } = transaccionData;
+  const { idcaja, tipo_movimiento, descripcion, monto, idusuario, idventa, monto_anterior, monto_nuevo } = transaccionData;
   
   const result = await query(
-    `INSERT INTO transacciones_caja 
-     (idestado_caja, tipo_movimiento, descripcion, monto, idusuario, idventa, fecha)
-     VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+    `INSERT INTO transaccion_caja 
+     (idcaja, tipo_movimiento, descripcion, monto, idusuario, idventa, monto_anterior, monto_nuevo, fecha)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
      RETURNING *`,
-    [idestado_caja, tipo_movimiento, descripcion, monto, idusuario, idventa]
+    [idcaja, tipo_movimiento, descripcion, monto, idusuario, idventa, monto_anterior, monto_nuevo]
   );
   
   const transaccionCompleta = await query(
     `SELECT 
-      tc.idtransaccion,
-      tc.idestado_caja,
+      tc.idtransaccion_caja as idtransaccion,
+      tc.idcaja,
       tc.tipo_movimiento,
       tc.descripcion,
       tc.monto,
@@ -213,11 +233,13 @@ exports.createTransaccionCaja = async (transaccionData) => {
       tc.idusuario,
       tc.idventa,
       u.nombres,
-      u.apellidos
-     FROM transacciones_caja tc
+      u.apellidos,
+      tc.monto_anterior,
+      tc.monto_nuevo
+     FROM transaccion_caja tc
      JOIN usuarios u ON tc.idusuario = u.idusuario
-     WHERE tc.idtransaccion = $1`,
-    [result.rows[0].idtransaccion]
+     WHERE tc.idtransaccion_caja = $1`,
+    [result.rows[0].idtransaccion_caja]
   );
   
   return transaccionCompleta.rows[0];

@@ -1,16 +1,15 @@
 // src/services/cashService.js
 const { query, pool } = require("../../db");
 
-exports.getCashStatus = async (userId) => {
+exports.getCashStatus = async () => {
   try {
-    // MODIFICADO: Obtener el último estado de caja sin importar el usuario
     const result = await query(
       `
       SELECT 
-        ec.estado,
-        ec.monto_final
-      FROM estado_caja ec
-      ORDER BY ec.idestado_caja DESC
+        c.estado,
+        c.total as monto_final
+      FROM caja c
+      ORDER BY c.idcaja DESC
       LIMIT 1
       `
     );
@@ -22,7 +21,10 @@ exports.getCashStatus = async (userId) => {
       };
     }
 
-    return result.rows[0];
+    return {
+      estado: result.rows[0].estado,
+      monto_final: parseFloat(result.rows[0].monto_final).toFixed(2)
+    };
   } catch (error) {
     console.error("Error in getCashStatus service:", error);
     return {
@@ -34,18 +36,19 @@ exports.getCashStatus = async (userId) => {
 
 exports.getUserTransactions = async (userId) => {
   try {
-    // Mantener solo transacciones de hoy para el usuario actual
     const result = await query(
       `
       SELECT 
-        tc.idtransaccion,
+        tc.idtransaccion_caja as idtransaccion,
         tc.tipo_movimiento,
         tc.descripcion,
         tc.monto,
         tc.fecha,
         tc.idusuario,
-        CONCAT(u.nombres, ' ', u.apellidos) as nombre_usuario
-      FROM transacciones_caja tc
+        CONCAT(u.nombres, ' ', u.apellidos) as nombre_usuario,
+        tc.monto_anterior,
+        tc.monto_nuevo
+      FROM transaccion_caja tc
       INNER JOIN usuarios u ON tc.idusuario = u.idusuario
       WHERE tc.idusuario = $1
         AND DATE(tc.fecha) = CURRENT_DATE
@@ -68,67 +71,87 @@ exports.createTransaction = async ({ tipoMovimiento, descripcion, monto, userId 
   try {
     await client.query('BEGIN');
     
-    // 1. Obtener el último estado de caja global (sin filtrar por usuario)
-    const estadoCajaQuery = `
-      SELECT idestado_caja, estado, monto_final, idusuario
-      FROM estado_caja 
-      ORDER BY idestado_caja DESC 
+    // 1. Obtener la caja actual (la última)
+    const cajaQuery = `
+      SELECT idcaja, estado, total
+      FROM caja 
+      ORDER BY idcaja DESC 
       LIMIT 1
     `;
     
-    const estadoCajaResult = await client.query(estadoCajaQuery);
+    const cajaResult = await client.query(cajaQuery);
     
-    if (estadoCajaResult.rows.length === 0) {
-      throw new Error("No se encontró estado de caja");
+    if (cajaResult.rows.length === 0) {
+      throw new Error("No se encontró caja");
     }
     
-    const estadoCajaActual = estadoCajaResult.rows[0];
+    const cajaActual = cajaResult.rows[0];
     
-    if (estadoCajaActual.estado !== 'abierta') {
+    if (cajaActual.estado !== 'abierta') {
       throw new Error("La caja no está abierta para realizar transacciones");
     }
     
-    const idestado_caja = estadoCajaActual.idestado_caja;
+    const idcaja = cajaActual.idcaja;
+    const montoAnterior = parseFloat(cajaActual.total);
+    let montoNuevo = montoAnterior;
     
-    // 2. Insertar transacción con el usuario actual
+    // 2. Calcular nuevo monto
+    if (tipoMovimiento === 'Ingreso' || tipoMovimiento === 'Apertura') {
+      montoNuevo = montoAnterior + monto;
+    } else if (tipoMovimiento === 'Egreso') {
+      if (montoAnterior < monto) {
+        throw new Error("Saldo insuficiente en caja");
+      }
+      montoNuevo = montoAnterior - monto;
+    } else if (tipoMovimiento === 'Cierre') {
+      montoNuevo = montoAnterior;
+    }
+
+    // 3. Insertar transacción
     const result = await client.query(
       `
-      INSERT INTO transacciones_caja (tipo_movimiento, descripcion, monto, fecha, idestado_caja, idusuario)
-      VALUES ($1, $2, $3, TIMEZONE('America/La_Paz', NOW()), $4, $5)
+      INSERT INTO transaccion_caja (
+        idcaja, 
+        tipo_movimiento, 
+        descripcion, 
+        monto, 
+        fecha, 
+        idusuario, 
+        monto_anterior, 
+        monto_nuevo
+      )
+      VALUES ($1, $2, $3, $4, TIMEZONE('America/La_Paz', NOW()), $5, $6, $7)
       RETURNING *
       `,
-      [tipoMovimiento, descripcion, monto, idestado_caja, userId]
+      [idcaja, tipoMovimiento.toLowerCase(), descripcion, monto, userId, montoAnterior, montoNuevo]
     );
 
-    // 3. Actualizar monto final en estado_caja (mismo registro para todos)
-    if (tipoMovimiento === 'Ingreso') {
+    // 4. Actualizar total en caja (solo si no es Cierre)
+    if (tipoMovimiento !== 'Cierre') {
       await client.query(
-        `UPDATE estado_caja SET monto_final = monto_final + $1 WHERE idestado_caja = $2`,
-        [monto, idestado_caja]
-      );
-    } else if (tipoMovimiento === 'Egreso') {
-      await client.query(
-        `UPDATE estado_caja SET monto_final = monto_final - $1 WHERE idestado_caja = $2`,
-        [monto, idestado_caja]
+        `UPDATE caja SET total = $1 WHERE idcaja = $2`,
+        [montoNuevo, idcaja]
       );
     }
 
-    // 4. Obtener información completa de la transacción
+    // 5. Obtener información completa de la transacción
     const transactionResult = await client.query(
       `
       SELECT 
-        tc.idtransaccion,
+        tc.idtransaccion_caja as idtransaccion,
         tc.tipo_movimiento,
         tc.descripcion,
         tc.monto,
         tc.fecha,
         tc.idusuario,
-        CONCAT(u.nombres, ' ', u.apellidos) as nombre_usuario
-      FROM transacciones_caja tc
+        CONCAT(u.nombres, ' ', u.apellidos) as nombre_usuario,
+        tc.monto_anterior,
+        tc.monto_nuevo
+      FROM transaccion_caja tc
       INNER JOIN usuarios u ON tc.idusuario = u.idusuario
-      WHERE tc.idtransaccion = $1
+      WHERE tc.idtransaccion_caja = $1
       `,
-      [result.rows[0].idtransaccion]
+      [result.rows[0].idtransaccion_caja]
     );
 
     await client.query('COMMIT');
@@ -148,38 +171,47 @@ exports.openCash = async ({ montoInicial, userId }) => {
   try {
     await client.query('BEGIN');
     
-    // Verificar si ya existe un estado abierto (sin importar usuario)
-    const estadoActualQuery = `
-      SELECT estado FROM estado_caja 
-      ORDER BY idestado_caja DESC 
+    // Verificar si ya existe una caja abierta
+    const cajaActualQuery = `
+      SELECT estado FROM caja 
+      ORDER BY idcaja DESC 
       LIMIT 1
     `;
     
-    const estadoActualResult = await client.query(estadoActualQuery);
+    const cajaActualResult = await client.query(cajaActualQuery);
     
-    if (estadoActualResult.rows.length > 0 && estadoActualResult.rows[0].estado === 'abierta') {
+    if (cajaActualResult.rows.length > 0 && cajaActualResult.rows[0].estado === 'abierta') {
       throw new Error("La caja ya está abierta");
     }
     
-    // Crear nuevo estado de caja con el usuario actual
-    const estadoCajaResult = await client.query(
+    // Crear nueva caja
+    const cajaResult = await client.query(
       `
-      INSERT INTO estado_caja (estado, monto_inicial, monto_final, idusuario)
-      VALUES ('abierta', $1, $1, $2)
-      RETURNING idestado_caja
+      INSERT INTO caja (nombre_caja, total, estado)
+      VALUES ('Caja Principal', $1, 'abierta')
+      RETURNING idcaja
       `,
-      [montoInicial, userId]
+      [montoInicial]
     );
     
-    const idestado_caja = estadoCajaResult.rows[0].idestado_caja;
+    const idcaja = cajaResult.rows[0].idcaja;
     
     // Crear transacción de apertura
     await client.query(
       `
-      INSERT INTO transacciones_caja (tipo_movimiento, descripcion, monto, fecha, idestado_caja, idusuario)
-      VALUES ('Apertura', 'Apertura de caja', $1, TIMEZONE('America/La_Paz', NOW()), $2, $3)
+      INSERT INTO transaccion_caja (
+        idcaja, 
+        tipo_movimiento, 
+        descripcion, 
+        monto, 
+        fecha, 
+        idusuario, 
+        monto_anterior, 
+        monto_nuevo
+      )
+      VALUES ($1, 'apertura', 'Apertura de caja', $2, TIMEZONE('America/La_Paz', NOW()), $3, 0, $2)
       `,
-      [montoInicial, idestado_caja, userId]
+      [idcaja, montoInicial, userId]
     );
     
     await client.query('COMMIT');
@@ -199,46 +231,51 @@ exports.closeCash = async ({ userId }) => {
   try {
     await client.query('BEGIN');
     
-    // Obtener el último estado de caja (sin importar quién lo abrió)
-    const estadoCajaQuery = `
-      SELECT idestado_caja, monto_final, estado
-      FROM estado_caja 
-      ORDER BY idestado_caja DESC 
+    // Obtener la caja abierta
+    const cajaQuery = `
+      SELECT idcaja, total, estado
+      FROM caja 
+      WHERE estado = 'abierta'
+      ORDER BY idcaja DESC 
       LIMIT 1
     `;
     
-    const estadoCajaResult = await client.query(estadoCajaQuery);
+    const cajaResult = await client.query(cajaQuery);
     
-    if (estadoCajaResult.rows.length === 0) {
-      throw new Error("No se encontró estado de caja");
+    if (cajaResult.rows.length === 0) {
+      throw new Error("No hay una caja abierta para cerrar");
     }
     
-    const estadoCajaActual = estadoCajaResult.rows[0];
+    const cajaActual = cajaResult.rows[0];
+    const idcaja = cajaActual.idcaja;
+    const montoCierre = parseFloat(cajaActual.total);
     
-    if (estadoCajaActual.estado !== 'abierta') {
-      throw new Error("La caja no está abierta");
-    }
-    
-    const montoCierre = parseFloat(estadoCajaActual.monto_final);
-    const idestado_caja = estadoCajaActual.idestado_caja;
-    
-    // Actualizar estado de caja (cualquier usuario puede cerrarla)
+    // Actualizar estado de caja
     await client.query(
       `
-      UPDATE estado_caja 
+      UPDATE caja 
       SET estado = 'cerrada'
-      WHERE idestado_caja = $1
+      WHERE idcaja = $1
       `,
-      [idestado_caja]
+      [idcaja]
     );
     
-    // Crear transacción de cierre con el usuario actual
+    // Crear transacción de cierre
     await client.query(
       `
-      INSERT INTO transacciones_caja (tipo_movimiento, descripcion, monto, fecha, idestado_caja, idusuario)
-      VALUES ('Cierre', 'Cierre de caja', $1, TIMEZONE('America/La_Paz', NOW()), $2, $3)
+      INSERT INTO transaccion_caja (
+        idcaja, 
+        tipo_movimiento, 
+        descripcion, 
+        monto, 
+        fecha, 
+        idusuario, 
+        monto_anterior, 
+        monto_nuevo
+      )
+      VALUES ($1, 'cierre', 'Cierre de caja', $2, TIMEZONE('America/La_Paz', NOW()), $3, $2, $2)
       `,
-      [montoCierre, idestado_caja, userId]
+      [idcaja, montoCierre, userId]
     );
     
     await client.query('COMMIT');

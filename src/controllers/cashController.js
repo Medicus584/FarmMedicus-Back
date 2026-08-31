@@ -3,7 +3,6 @@ const cashService = require("../services/cashService");
 
 exports.getCashStatus = async (req, res) => {
   try {
-    // MODIFICADO: Ya no necesita userId para obtener estado global
     const cashStatus = await cashService.getCashStatus();
     res.json(cashStatus);
   } catch (error) {

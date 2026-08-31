@@ -2,17 +2,48 @@ const { query, pool } = require("../../db");
 
 const getCurrentCashStatus = async () => {
   const sql = `
-    SELECT ec.*, u.usuario
-    FROM estado_caja ec
-    INNER JOIN usuarios u ON ec.idusuario = u.idusuario
-    ORDER BY ec.idestado_caja DESC
+    SELECT 
+      c.idcaja,
+      c.nombre_caja,
+      c.total as monto_final,
+      c.estado,
+      COALESCE(
+        (SELECT u.idusuario 
+         FROM transaccion_caja tc 
+         JOIN usuarios u ON tc.idusuario = u.idusuario 
+         WHERE tc.idcaja = c.idcaja 
+           AND tc.tipo_movimiento = 'apertura'
+         ORDER BY tc.idtransaccion_caja ASC 
+         LIMIT 1),
+        0
+      ) as idusuario,
+      COALESCE(
+        (SELECT u.usuario 
+         FROM transaccion_caja tc 
+         JOIN usuarios u ON tc.idusuario = u.idusuario 
+         WHERE tc.idcaja = c.idcaja 
+           AND tc.tipo_movimiento = 'apertura'
+         ORDER BY tc.idtransaccion_caja ASC 
+         LIMIT 1),
+        'Sistema'
+      ) as usuario
+    FROM caja c
+    ORDER BY c.idcaja DESC
     LIMIT 1
   `;
 
   const result = await query(sql);
 
   if (result.rows.length === 0) {
-    throw new Error("No hay registro de caja");
+    // Si no hay caja, devolver un estado por defecto
+    return {
+      idcaja: 0,
+      nombre_caja: "Caja Principal",
+      monto_final: "0.00",
+      estado: "cerrada",
+      idusuario: 0,
+      usuario: "Sistema"
+    };
   }
 
   return result.rows[0];
@@ -27,7 +58,10 @@ const processSale = async (saleData, userId) => {
     // Verificar si la caja está abierta para pagos en efectivo
     if (saleData.metodo_pago === "Efectivo") {
       const cashStatusCheck = await client.query(
-        "SELECT * FROM estado_caja ORDER BY idestado_caja DESC LIMIT 1",
+        `SELECT idcaja, estado, total 
+         FROM caja 
+         ORDER BY idcaja DESC 
+         LIMIT 1`
       );
 
       if (
@@ -35,7 +69,7 @@ const processSale = async (saleData, userId) => {
         cashStatusCheck.rows[0].estado === "cerrada"
       ) {
         throw new Error(
-          "La caja está cerrada. No se puede procesar la venta en efectivo.",
+          "La caja está cerrada. No se puede procesar la venta en efectivo."
         );
       }
     }
@@ -43,7 +77,7 @@ const processSale = async (saleData, userId) => {
     // Verificar usuario
     const userCheck = await client.query(
       "SELECT idusuario FROM usuarios WHERE idusuario = $1 AND estado = 0",
-      [userId],
+      [userId]
     );
 
     if (userCheck.rows.length === 0) {
@@ -54,7 +88,7 @@ const processSale = async (saleData, userId) => {
     if (saleData.doctorId) {
       const doctorCheck = await client.query(
         "SELECT iddoctor FROM doctores WHERE iddoctor = $1 AND estado = 0",
-        [saleData.doctorId],
+        [saleData.doctorId]
       );
 
       if (doctorCheck.rows.length === 0) {
@@ -65,7 +99,7 @@ const processSale = async (saleData, userId) => {
     // Obtener IDs de productos y lotes
     const productIds = saleData.items.map((item) => item.idproducto);
     const loteIds = saleData.items.flatMap((item) =>
-      item.lotes.map((lote) => lote.idlote),
+      item.lotes.map((lote) => lote.idlote)
     );
 
     // Verificar productos
@@ -76,7 +110,7 @@ const processSale = async (saleData, userId) => {
         WHERE idproducto = ANY($1::int[])
           AND estado = 0
       `,
-      [productIds],
+      [productIds]
     );
 
     // Verificar lotes
@@ -87,21 +121,21 @@ const processSale = async (saleData, userId) => {
         WHERE idlote = ANY($1::int[])
           AND estado = 0
       `,
-      [loteIds],
+      [loteIds]
     );
 
     const productsMap = new Map(
       productsResult.rows.map((producto) => [
         producto.idproducto,
         producto,
-      ]),
+      ])
     );
 
     const lotesMap = new Map(
       lotesResult.rows.map((lote) => [
         lote.idlote,
         lote,
-      ]),
+      ])
     );
 
     // Validar productos y lotes
@@ -110,19 +144,19 @@ const processSale = async (saleData, userId) => {
 
       if (!product) {
         throw new Error(
-          `El producto ${item.idproducto} no existe o está inactivo`,
+          `El producto ${item.idproducto} no existe o está inactivo`
         );
       }
 
       const cantidadLotes = item.lotes.reduce(
         (total, lote) => total + lote.cantidad,
-        0,
+        0
       );
 
       if (cantidadLotes !== item.cantidad) {
         throw new Error(
           `La cantidad de lotes seleccionados para ${product.nombre} ` +
-          `(${cantidadLotes}) no coincide con la cantidad solicitada (${item.cantidad})`,
+          `(${cantidadLotes}) no coincide con la cantidad solicitada (${item.cantidad})`
         );
       }
 
@@ -131,20 +165,20 @@ const processSale = async (saleData, userId) => {
 
         if (!lote) {
           throw new Error(
-            `El lote ${loteSeleccionado.idlote} no existe o está inactivo`,
+            `El lote ${loteSeleccionado.idlote} no existe o está inactivo`
           );
         }
 
         if (lote.idproducto !== item.idproducto) {
           throw new Error(
-            `El lote ${lote.idlote} no pertenece al producto ${product.nombre}`,
+            `El lote ${lote.idlote} no pertenece al producto ${product.nombre}`
           );
         }
 
         if (lote.stock < loteSeleccionado.cantidad) {
           throw new Error(
             `Stock insuficiente para ${product.nombre} en el lote ${lote.idlote}. ` +
-            `Stock disponible: ${lote.stock}`,
+            `Stock disponible: ${lote.stock}`
           );
         }
       }
@@ -163,24 +197,19 @@ const processSale = async (saleData, userId) => {
         saleData.total,
         saleData.metodo_pago,
         saleData.descripcion_descuento || null,
-      ],
+      ]
     );
 
     const saleId = saleResult.rows[0].idventa;
 
     // Insertar detalles de venta con descuento_monto por producto
     for (const item of saleData.items) {
-      // Calcular el descuento por producto (si viene del frontend)
-      // El descuento_monto se calcula como: (precio_unitario * cantidad) - (precio_unitario * cantidad * (1 - descuento_producto/100))
-      // O simplemente se pasa el monto del descuento directamente
       let descuentoMonto = 0;
       
-      // Si el item tiene un campo descuento_producto (porcentaje), calculamos el monto
       if (item.descuento_producto && item.descuento_producto > 0) {
         const subtotalLinea = item.precio_unitario * item.cantidad;
         descuentoMonto = (subtotalLinea * item.descuento_producto) / 100;
       } else if (item.descuento_monto) {
-        // Si ya viene el monto directamente
         descuentoMonto = item.descuento_monto;
       }
 
@@ -195,7 +224,7 @@ const processSale = async (saleData, userId) => {
           item.subtotal_linea,
           descuentoMonto,
           saleData.doctorId || null,
-        ],
+        ]
       );
 
       // Actualizar stock de lotes
@@ -208,12 +237,12 @@ const processSale = async (saleData, userId) => {
               AND stock >= $1
               AND estado = 0
           `,
-          [lote.cantidad, lote.idlote],
+          [lote.cantidad, lote.idlote]
         );
 
         if (result.rowCount === 0) {
           throw new Error(
-            `No hay stock suficiente en el lote ${lote.idlote}`,
+            `No hay stock suficiente en el lote ${lote.idlote}`
           );
         }
       }
@@ -221,33 +250,64 @@ const processSale = async (saleData, userId) => {
 
     // Registrar transacción de caja para pagos en efectivo
     if (saleData.metodo_pago === "Efectivo") {
-      const lastMontoFinalResult = await client.query(
-        "SELECT monto_final FROM estado_caja ORDER BY idestado_caja DESC LIMIT 1",
-      );
-      const lastMontoFinal = lastMontoFinalResult.rows[0]?.monto_final || 0;
-
-      const nuevoMontoFinal =
-        parseFloat(lastMontoFinal) + parseFloat(saleData.total);
-
-      const newCashStatusResult = await client.query(
-        `INSERT INTO estado_caja (estado, monto_inicial, monto_final, idusuario) 
-         VALUES ('abierta', $1, $2, $3) 
-         RETURNING idestado_caja`,
-        [lastMontoFinal, nuevoMontoFinal, userId],
+      // Obtener la caja actual
+      const cajaResult = await client.query(
+        `SELECT idcaja, total 
+         FROM caja 
+         WHERE estado = 'abierta'
+         ORDER BY idcaja DESC 
+         LIMIT 1`
       );
 
-      const newCashStatusId = newCashStatusResult.rows[0].idestado_caja;
+      if (cajaResult.rows.length === 0) {
+        throw new Error("No hay una caja abierta para registrar el ingreso");
+      }
 
+      const idcaja = cajaResult.rows[0].idcaja;
+      const montoAnterior = parseFloat(cajaResult.rows[0].total);
+      const montoNuevo = montoAnterior + parseFloat(saleData.total);
+
+      // Actualizar el total en la caja
       await client.query(
-        `INSERT INTO transacciones_caja (idestado_caja, tipo_movimiento, descripcion, monto, fecha, idusuario, idventa) 
-         VALUES ($1, 'Ingreso', $2, $3, TIMEZONE('America/La_Paz', NOW()), $4, $5)`,
+        `UPDATE caja 
+         SET total = $1 
+         WHERE idcaja = $2`,
+        [montoNuevo, idcaja]
+      );
+
+      // Registrar transacción en transaccion_caja
+      await client.query(
+        `INSERT INTO transaccion_caja (
+          idcaja, 
+          tipo_movimiento, 
+          descripcion, 
+          monto, 
+          fecha, 
+          idusuario, 
+          monto_anterior, 
+          monto_nuevo,
+          idventa
+        ) 
+        VALUES (
+          $1, 
+          'ingreso', 
+          $2, 
+          $3, 
+          TIMEZONE('America/La_Paz', NOW()), 
+          $4, 
+          $5, 
+          $6,
+          $7
+        )`,
         [
-          newCashStatusId,
-          `Venta N° ${saleId}: ${saleData.descripcion}`,
+          idcaja,
+          `Venta N° ${saleId}: ${saleData.descripcion || 'Venta en efectivo'}`,
           saleData.total,
           userId,
+          montoAnterior,
+          montoNuevo,
           saleId,
-        ],
+        ]
       );
     }
 
@@ -265,7 +325,7 @@ const processSale = async (saleData, userId) => {
 const getDoctores = async () => {
   try {
     const result = await query(
-      "SELECT iddoctor as id, nombre_doctor as nombre FROM doctores WHERE estado = 0 ORDER BY nombre_doctor",
+      "SELECT iddoctor as id, nombre_doctor as nombre FROM doctores WHERE estado = 0 ORDER BY nombre_doctor"
     );
     return result.rows;
   } catch (error) {
