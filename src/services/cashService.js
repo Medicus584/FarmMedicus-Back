@@ -173,7 +173,7 @@ exports.openCash = async ({ montoInicial, userId }) => {
     
     // Verificar si ya existe una caja abierta
     const cajaActualQuery = `
-      SELECT estado FROM caja 
+      SELECT idcaja, estado, total FROM caja 
       ORDER BY idcaja DESC 
       LIMIT 1
     `;
@@ -184,17 +184,34 @@ exports.openCash = async ({ montoInicial, userId }) => {
       throw new Error("La caja ya está abierta");
     }
     
-    // Crear nueva caja
-    const cajaResult = await client.query(
-      `
-      INSERT INTO caja (nombre_caja, total, estado)
-      VALUES ('Caja Principal', $1, 'abierta')
-      RETURNING idcaja
-      `,
-      [montoInicial]
-    );
+    let idcaja;
+    let montoAnterior = 0;
     
-    const idcaja = cajaResult.rows[0].idcaja;
+    if (cajaActualResult.rows.length > 0) {
+      // Si existe una caja cerrada, actualizarla
+      idcaja = cajaActualResult.rows[0].idcaja;
+      montoAnterior = parseFloat(cajaActualResult.rows[0].total) || 0;
+      
+      await client.query(
+        `
+        UPDATE caja 
+        SET estado = 'abierta', total = $1
+        WHERE idcaja = $2
+        `,
+        [montoInicial, idcaja]
+      );
+    } else {
+      // Si no existe ninguna caja, crear una nueva
+      const cajaResult = await client.query(
+        `
+        INSERT INTO caja (nombre_caja, total, estado)
+        VALUES ('Caja Principal', $1, 'abierta')
+        RETURNING idcaja
+        `,
+        [montoInicial]
+      );
+      idcaja = cajaResult.rows[0].idcaja;
+    }
     
     // Crear transacción de apertura
     await client.query(
@@ -209,9 +226,9 @@ exports.openCash = async ({ montoInicial, userId }) => {
         monto_anterior, 
         monto_nuevo
       )
-      VALUES ($1, 'apertura', 'Apertura de caja', $2, TIMEZONE('America/La_Paz', NOW()), $3, 0, $2)
+      VALUES ($1, 'apertura', 'Apertura de caja', $2, TIMEZONE('America/La_Paz', NOW()), $3, $4, $2)
       `,
-      [idcaja, montoInicial, userId]
+      [idcaja, montoInicial, userId, montoAnterior]
     );
     
     await client.query('COMMIT');
