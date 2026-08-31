@@ -60,6 +60,38 @@ const ventasController = {
       console.error("Error en getVentasHoyAsistente:", error);
       res.status(500).json({ error: error.message });
     }
+  },
+
+  // ============================================
+  // DELETE - ANULAR VENTA
+  // ============================================
+  anularVenta: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const usuarioId = req.user?.idusuario || 1; // Obtener del token o sesión
+      const username = req.user?.usuario || "Sistema";
+
+      if (!id || isNaN(Number(id))) {
+        return res.status(400).json({
+          success: false,
+          message: "ID de venta inválido"
+        });
+      }
+
+      const result = await ventasService.anularVenta(id, usuarioId, username);
+
+      res.json({
+        success: true,
+        message: "Venta anulada correctamente",
+        data: result
+      });
+    } catch (error) {
+      console.error("Error en anularVenta controller:", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Error al anular la venta"
+      });
+    }
   }
 };
 

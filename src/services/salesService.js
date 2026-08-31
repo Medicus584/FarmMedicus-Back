@@ -202,33 +202,54 @@ const processSale = async (saleData, userId) => {
 
     const saleId = saleResult.rows[0].idventa;
 
-    // Insertar detalles de venta con descuento_monto por producto
+    // ============================================
+    // INSERTAR DETALLES DE VENTA CON idlote
+    // CADA LOTE = UN REGISTRO EN detalle_ventas
+    // ============================================
     for (const item of saleData.items) {
-      let descuentoMonto = 0;
+      // Calcular descuento total del producto
+      let descuentoMontoTotal = 0;
       
       if (item.descuento_producto && item.descuento_producto > 0) {
         const subtotalLinea = item.precio_unitario * item.cantidad;
-        descuentoMonto = (subtotalLinea * item.descuento_producto) / 100;
+        descuentoMontoTotal = (subtotalLinea * item.descuento_producto) / 100;
       } else if (item.descuento_monto) {
-        descuentoMonto = item.descuento_monto;
+        descuentoMontoTotal = item.descuento_monto;
       }
 
-      await client.query(
-        `INSERT INTO detalle_ventas (idventa, idproducto, cantidad, precio_unitario, subtotal_linea, descuento_monto, iddoctor) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          saleId,
-          item.idproducto,
-          item.cantidad,
-          item.precio_unitario,
-          item.subtotal_linea,
-          descuentoMonto,
-          saleData.doctorId || null,
-        ]
-      );
-
-      // Actualizar stock de lotes
+      // Para CADA LOTE, insertar un registro en detalle_ventas
       for (const lote of item.lotes) {
+        // Calcular subtotal para este lote específico
+        const subtotalLote = item.precio_unitario * lote.cantidad;
+        
+        // Proporcionar el descuento proporcional a este lote
+        const descuentoLote = (descuentoMontoTotal * lote.cantidad) / item.cantidad;
+
+        await client.query(
+          `INSERT INTO detalle_ventas (
+            idventa, 
+            idproducto, 
+            idlote,      -- ✅ GUARDAMOS EL LOTE
+            cantidad, 
+            precio_unitario, 
+            subtotal_linea, 
+            descuento_monto, 
+            iddoctor
+          ) 
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            saleId,
+            item.idproducto,
+            lote.idlote,        // ✅ ID DEL LOTE
+            lote.cantidad,      // ✅ CANTIDAD DE ESTE LOTE (ej: 10 o 18)
+            item.precio_unitario,
+            subtotalLote,       // ✅ SUBTOTAL DE ESTE LOTE
+            descuentoLote,      // ✅ DESCUENTO PROPORCIONAL
+            saleData.doctorId || null,
+          ]
+        );
+
+        // Actualizar stock del lote
         const result = await client.query(
           `
             UPDATE lotes
@@ -245,12 +266,13 @@ const processSale = async (saleData, userId) => {
             `No hay stock suficiente en el lote ${lote.idlote}`
           );
         }
+
+        console.log(`✅ Producto ${item.idproducto}: ${lote.cantidad} unidades del lote ${lote.idlote}`);
       }
     }
 
     // Registrar transacción de caja para pagos en efectivo
     if (saleData.metodo_pago === "Efectivo") {
-      // Obtener la caja actual
       const cajaResult = await client.query(
         `SELECT idcaja, total 
          FROM caja 
@@ -267,7 +289,6 @@ const processSale = async (saleData, userId) => {
       const montoAnterior = parseFloat(cajaResult.rows[0].total);
       const montoNuevo = montoAnterior + parseFloat(saleData.total);
 
-      // Actualizar el total en la caja
       await client.query(
         `UPDATE caja 
          SET total = $1 
@@ -275,7 +296,6 @@ const processSale = async (saleData, userId) => {
         [montoNuevo, idcaja]
       );
 
-      // Registrar transacción en transaccion_caja
       await client.query(
         `INSERT INTO transaccion_caja (
           idcaja, 
