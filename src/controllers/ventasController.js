@@ -1,3 +1,4 @@
+// src/controllers/ventasController.js
 const ventasService = require("../services/ventasService");
 
 const ventasController = {
@@ -58,6 +59,29 @@ const ventasController = {
       res.json(ventas);
     } catch (error) {
       console.error("Error en getVentasHoyAsistente:", error);
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  // ============================================
+  // GET - TOTALES INVERSIÓN Y GANANCIA
+  // ============================================
+  getTotalesInversionGanancia: async (req, res) => {
+    try {
+      const { empleado, metodo, fechaEspecifica, fechaInicio, fechaFin, medico } = req.query;
+      
+      const totales = await ventasService.getTotalesInversionGanancia({
+        empleado,
+        metodo,
+        fechaEspecifica,
+        fechaInicio,
+        fechaFin,
+        medico,
+      });
+      
+      res.json(totales);
+    } catch (error) {
+      console.error("Error en getTotalesInversionGanancia:", error);
       res.status(500).json({ error: error.message });
     }
   },

@@ -254,6 +254,89 @@ const ventasService = {
   },
 
   // ============================================
+  // GET - OBTENER TOTALES DE INVERSIÓN Y GANANCIA
+  // ============================================
+  getTotalesInversionGanancia: async (filtros = {}) => {
+    try {
+      let whereConditions = [];
+      let queryParams = [];
+      let paramCount = 0;
+
+      // Filtro por empleado
+      if (filtros.empleado && filtros.empleado !== "Todos") {
+        paramCount++;
+        whereConditions.push(`u.usuario = $${paramCount}`);
+        queryParams.push(filtros.empleado);
+      }
+
+      // Filtro por método de pago
+      if (filtros.metodo && filtros.metodo !== "Todos") {
+        paramCount++;
+        whereConditions.push(`v.metodo_pago = $${paramCount}`);
+        queryParams.push(filtros.metodo);
+      }
+
+      // Filtro por fecha específica
+      if (filtros.fechaEspecifica) {
+        paramCount++;
+        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = $${paramCount}`);
+        queryParams.push(filtros.fechaEspecifica);
+      }
+
+      // Filtro por rango de fechas
+      if (filtros.fechaInicio && filtros.fechaFin) {
+        paramCount++;
+        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') >= $${paramCount}`);
+        queryParams.push(filtros.fechaInicio);
+        
+        paramCount++;
+        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') <= $${paramCount}`);
+        queryParams.push(filtros.fechaFin);
+      }
+
+      // Si no hay filtro de fecha, usar fecha actual
+      if (!filtros.fechaEspecifica && !filtros.fechaInicio) {
+        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = CURRENT_DATE`);
+      }
+
+      // Filtro por médico
+      if (filtros.medico && filtros.medico !== "Todos") {
+        paramCount++;
+        whereConditions.push(`
+          EXISTS (
+            SELECT 1
+            FROM detalle_ventas dv
+            INNER JOIN doctores m ON dv.iddoctor = m.iddoctor
+            WHERE dv.idventa = v.idventa AND m.nombre_doctor = $${paramCount}
+          )
+        `);
+        queryParams.push(filtros.medico);
+      }
+
+      const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
+
+      // Query para calcular inversión y ganancia
+      // Inversión = SUM(cantidad * precio_compra)
+      // Ganancia = SUM(cantidad * precio_venta)
+      const querySQL = `
+        SELECT 
+          COALESCE(SUM(dv.cantidad * p.precio_compra), 0) AS total_invertido,
+          COALESCE(SUM(dv.cantidad * p.precio_venta), 0) AS total_ganado
+        FROM detalle_ventas dv
+        INNER JOIN ventas v ON dv.idventa = v.idventa
+        INNER JOIN usuarios u ON v.idusuario = u.idusuario
+        INNER JOIN productos p ON dv.idproducto = p.idproducto
+        ${whereClause}
+      `;
+
+      const result = await query(querySQL, queryParams);
+      return result.rows[0];
+    } catch (error) {
+      throw new Error("Error al obtener totales de inversión y ganancia: " + error.message);
+    }
+  },
+
+  // ============================================
   // DELETE - ANULAR VENTA (CON EGRESO DE CAJA CORRECTO)
   // ============================================
   anularVenta: async (idVenta, usuarioId, username) => {
