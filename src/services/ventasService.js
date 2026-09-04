@@ -63,10 +63,11 @@ const ventasService = {
 
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
+      // CORREGIDO: Convertir fecha_hora a zona horaria Bolivia al leer
       const ventasQuery = `
         SELECT 
           v.idventa,
-          v.fecha_hora,
+          (v.fecha_hora AT TIME ZONE 'UTC' AT TIME ZONE 'America/La_Paz') as fecha_hora,
           v.idusuario,
           v.descripcion,
           v.sub_total,
@@ -205,10 +206,11 @@ const ventasService = {
 
   getVentasHoyAsistente: async (username) => {
     try {
+      // CORREGIDO: Convertir fecha_hora a zona horaria Bolivia al leer
       const ventasQuery = `
         SELECT 
           v.idventa,
-          v.fecha_hora,
+          (v.fecha_hora AT TIME ZONE 'UTC' AT TIME ZONE 'America/La_Paz') as fecha_hora,
           v.idusuario,
           v.descripcion,
           v.sub_total,
@@ -316,8 +318,6 @@ const ventasService = {
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
       // Query para calcular inversión y ganancia
-      // Inversión = SUM(cantidad * precio_compra)
-      // Ganancia = SUM(cantidad * precio_venta)
       const querySQL = `
         SELECT 
           COALESCE(SUM(dv.cantidad * p.precio_compra), 0) AS total_invertido,
