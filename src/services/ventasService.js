@@ -37,22 +37,22 @@ const ventasService = {
 
       if (filtros.fechaEspecifica) {
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) = $${paramCount}`);
         queryParams.push(filtros.fechaEspecifica);
       }
 
       if (filtros.fechaInicio && filtros.fechaFin) {
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') >= $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) >= $${paramCount}`);
         queryParams.push(filtros.fechaInicio);
         
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') <= $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) <= $${paramCount}`);
         queryParams.push(filtros.fechaFin);
       }
 
       if (!filtros.fechaEspecifica && !filtros.fechaInicio) {
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = CURRENT_DATE`);
+        whereConditions.push(`DATE(v.fecha_hora) = CURRENT_DATE`);
       }
 
       if (filtros.medico && filtros.medico !== "Todos") {
@@ -63,11 +63,11 @@ const ventasService = {
 
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
-      // CORREGIDO: Usar la fecha directamente sin conversión adicional
+      // SIN NINGUNA CONVERSIÓN - Mostrar exactamente lo que está en la BD
       const ventasQuery = `
         SELECT 
           v.idventa,
-          v.fecha_hora as fecha_hora,
+          v.fecha_hora,
           v.idusuario,
           v.descripcion,
           v.sub_total,
@@ -154,22 +154,22 @@ const ventasService = {
 
       if (filtros.fechaEspecifica) {
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) = $${paramCount}`);
         queryParams.push(filtros.fechaEspecifica);
       }
 
       if (filtros.fechaInicio && filtros.fechaFin) {
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') >= $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) >= $${paramCount}`);
         queryParams.push(filtros.fechaInicio);
         
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') <= $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) <= $${paramCount}`);
         queryParams.push(filtros.fechaFin);
       }
 
       if (!filtros.fechaEspecifica && !filtros.fechaInicio) {
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = CURRENT_DATE`);
+        whereConditions.push(`DATE(v.fecha_hora) = CURRENT_DATE`);
       }
 
       if (filtros.medico && filtros.medico !== "Todos") {
@@ -206,11 +206,11 @@ const ventasService = {
 
   getVentasHoyAsistente: async (username) => {
     try {
-      // CORREGIDO: Usar la fecha directamente sin conversión adicional
+      // SIN NINGUNA CONVERSIÓN - Mostrar exactamente lo que está en la BD
       const ventasQuery = `
         SELECT 
           v.idventa,
-          v.fecha_hora as fecha_hora,
+          v.fecha_hora,
           v.idusuario,
           v.descripcion,
           v.sub_total,
@@ -222,7 +222,7 @@ const ventasService = {
           u.usuario as usuario_usuario
         FROM ventas v
         INNER JOIN usuarios u ON v.idusuario = u.idusuario
-        WHERE DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = CURRENT_DATE
+        WHERE DATE(v.fecha_hora) = CURRENT_DATE
           AND u.usuario = $1
         ORDER BY v.fecha_hora DESC
       `;
@@ -275,22 +275,22 @@ const ventasService = {
 
       if (filtros.fechaEspecifica) {
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) = $${paramCount}`);
         queryParams.push(filtros.fechaEspecifica);
       }
 
       if (filtros.fechaInicio && filtros.fechaFin) {
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') >= $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) >= $${paramCount}`);
         queryParams.push(filtros.fechaInicio);
         
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') <= $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) <= $${paramCount}`);
         queryParams.push(filtros.fechaFin);
       }
 
       if (!filtros.fechaEspecifica && !filtros.fechaInicio) {
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = CURRENT_DATE`);
+        whereConditions.push(`DATE(v.fecha_hora) = CURRENT_DATE`);
       }
 
       if (filtros.medico && filtros.medico !== "Todos") {
@@ -441,7 +441,7 @@ const ventasService = {
             fecha
           )
           VALUES (
-            $1, $2, $3, $4, $5, 'egreso', $6, TIMEZONE('America/La_Paz', NOW())
+            $1, $2, $3, $4, $5, 'egreso', $6, NOW()
           )
           `,
           [
