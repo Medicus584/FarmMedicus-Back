@@ -63,6 +63,9 @@ const ventasController = {
     }
   },
 
+  // ============================================
+  // GET - TOTALES INVERSIÓN Y GANANCIA
+  // ============================================
   getTotalesInversionGanancia: async (req, res) => {
     try {
       const { empleado, metodo, fechaEspecifica, fechaInicio, fechaFin, medico } = req.query;
@@ -83,10 +86,13 @@ const ventasController = {
     }
   },
 
+  // ============================================
+  // DELETE - ANULAR VENTA
+  // ============================================
   anularVenta: async (req, res) => {
     try {
       const { id } = req.params;
-      const usuarioId = req.user?.idusuario || 1;
+      const usuarioId = req.user?.idusuario || 1; // Obtener del token o sesión
       const username = req.user?.usuario || "Sistema";
 
       if (!id || isNaN(Number(id))) {
