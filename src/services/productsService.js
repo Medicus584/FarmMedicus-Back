@@ -934,7 +934,7 @@ const productsService = {
       }
 
       await client.query(
-        "DELETE FROM lotes WHERE idproducto = $1",
+        "UPDATE lotes set estado = 1 WHERE idproducto = $1",
         [id],
       );
 
@@ -951,32 +951,62 @@ const productsService = {
           );
         }
 
-        const valores = productoData.lotes
-          .map(
-            (_, index) =>
-              `($1, $${index * 2 + 2}, $${index * 2 + 3})`
-          )
-          .join(", ");
-
-        const params = [
-          id,
-          ...productoData.lotes.flatMap((lote) => [
-            lote.stock,
-            lote.fecha_vencimiento || null,
-          ]),
-        ];
-
-        await client.query(
-          `
-            INSERT INTO lotes (
-              idproducto,
-              stock,
-              fecha_vencimiento
-            )
-            VALUES ${valores}
-          `,
-          params
+        const lotesExistentes = productoData.lotes.filter(
+          (lote) => lote.idlote != null
         );
+
+        for (const lote of lotesExistentes) {
+          await client.query(
+            `
+              UPDATE lotes
+              SET
+                stock = $1,
+                fecha_vencimiento = $2,
+                estado = 0
+              WHERE idlote = $3
+                AND idproducto = $4
+            `,
+            [
+              lote.stock,
+              lote.fecha_vencimiento || null,
+              lote.idlote,
+              id,
+            ]
+          );
+        }
+
+        const lotesNuevos = productoData.lotes.filter(
+          (lote) => lote.idlote == null
+        );
+
+        if (lotesNuevos.length > 0) {
+          const valores = lotesNuevos
+            .map(
+              (_, index) =>
+                `($1, $${index * 2 + 2}, $${index * 2 + 3})`
+            )
+            .join(", ");
+
+          const params = [
+            id,
+            ...lotesNuevos.flatMap((lote) => [
+              lote.stock,
+              lote.fecha_vencimiento || null,
+            ]),
+          ];
+
+          await client.query(
+            `
+              INSERT INTO lotes (
+                idproducto,
+                stock,
+                fecha_vencimiento
+              )
+              VALUES ${valores}
+            `,
+            params
+          );
+        }
       }
 
       const grupoActual = await productsService.obtenerGrupoCompleto(
