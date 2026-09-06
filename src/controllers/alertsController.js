@@ -3,11 +3,12 @@ const alertsService = require("../services/alertsService");
 
 const getLowStockAlerts = async (req, res) => {
   try {
-    const { search, prioridad, page, limit } = req.query;
+    const { search, prioridad, laboratorio, page, limit } = req.query;
     
     const filters = {
       search: search || undefined,
       prioridad: prioridad || undefined,
+      laboratorio: laboratorio || undefined,
       page: parseInt(page) || 1,
       limit: parseInt(limit) || 15
     };
@@ -25,11 +26,12 @@ const getLowStockAlerts = async (req, res) => {
 
 const getExpirationAlerts = async (req, res) => {
   try {
-    const { search, prioridad, page, limit } = req.query;
+    const { search, prioridad, laboratorio, page, limit } = req.query;
     
     const filters = {
       search: search || undefined,
       prioridad: prioridad || undefined,
+      laboratorio: laboratorio || undefined,
       page: parseInt(page) || 1,
       limit: parseInt(limit) || 15
     };

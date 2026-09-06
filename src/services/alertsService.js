@@ -3,7 +3,7 @@ const { query } = require("../../db");
 
 const getLowStockAlerts = async (filters = {}) => {
   try {
-    const { search, prioridad, page = 1, limit = 15 } = filters;
+    const { search, prioridad, laboratorio, page = 1, limit = 15 } = filters;
     const offset = (page - 1) * limit;
 
     let sql = `
@@ -34,6 +34,12 @@ const getLowStockAlerts = async (filters = {}) => {
     if (search) {
       sql += ` AND (p.nombre ILIKE $${paramCount} OR p.descripcion ILIKE $${paramCount})`;
       params.push(`%${search}%`);
+      paramCount++;
+    }
+
+    if (laboratorio) {
+      sql += ` AND la.nombre_laboratorio = $${paramCount}`;
+      params.push(laboratorio);
       paramCount++;
     }
 
@@ -81,7 +87,7 @@ const getLowStockAlerts = async (filters = {}) => {
 
 const getExpirationAlerts = async (filters = {}) => {
   try {
-    const { search, prioridad, page = 1, limit = 15 } = filters;
+    const { search, prioridad, laboratorio, page = 1, limit = 15 } = filters;
     const offset = (page - 1) * limit;
 
     let sql = `
@@ -114,6 +120,12 @@ const getExpirationAlerts = async (filters = {}) => {
     if (search) {
       sql += ` AND (p.nombre ILIKE $${paramCount} OR p.descripcion ILIKE $${paramCount})`;
       params.push(`%${search}%`);
+      paramCount++;
+    }
+
+    if (laboratorio) {
+      sql += ` AND lab.nombre_laboratorio = $${paramCount}`;
+      params.push(laboratorio);
       paramCount++;
     }
 
