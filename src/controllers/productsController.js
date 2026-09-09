@@ -181,13 +181,39 @@ const productsController = {
       res.status(201).json(producto);
     } catch (error) {
       console.error("Error creating producto:", error);
+      
       if (error.message.includes("Ya existe un producto con el código")) {
         return res.status(409).json({
           error: error.message,
           code: "DUPLICATE_CODE"
         });
       }
-      res.status(500).json({ error: error.message });
+      
+      if (error.message.includes("código de barras")) {
+        return res.status(409).json({
+          error: error.message,
+          code: "DUPLICATE_BARCODE"
+        });
+      }
+      
+      if (error.message.includes("fecha de vencimiento")) {
+        return res.status(400).json({
+          error: error.message,
+          code: "INVALID_DATE"
+        });
+      }
+      
+      if (error.message.includes("Solo se permiten imágenes")) {
+        return res.status(400).json({
+          error: error.message,
+          code: "INVALID_IMAGE"
+        });
+      }
+      
+      res.status(500).json({ 
+        error: error.message || "Error al crear el producto",
+        details: error.detail || null
+      });
     }
   },
 
@@ -226,13 +252,39 @@ const productsController = {
       res.json(producto);
     } catch (error) {
       console.error("Error updating producto:", error);
+      
       if (error.message.includes("Ya existe otro producto con el código")) {
         return res.status(409).json({
           error: error.message,
           code: "DUPLICATE_CODE"
         });
       }
-      res.status(500).json({ error: error.message });
+      
+      if (error.message.includes("código de barras")) {
+        return res.status(409).json({
+          error: error.message,
+          code: "DUPLICATE_BARCODE"
+        });
+      }
+      
+      if (error.message.includes("fecha de vencimiento")) {
+        return res.status(400).json({
+          error: error.message,
+          code: "INVALID_DATE"
+        });
+      }
+      
+      if (error.message.includes("Solo se permiten imágenes")) {
+        return res.status(400).json({
+          error: error.message,
+          code: "INVALID_IMAGE"
+        });
+      }
+      
+      res.status(500).json({ 
+        error: error.message || "Error al actualizar el producto",
+        details: error.detail || null
+      });
     }
   },
 
@@ -364,7 +416,7 @@ const productsController = {
       res.json(laboratorio);
     } catch (error) {
       res.status(500).json({ error: error.message });
-    }
+    } 
   },
 
   deleteLaboratorio: async (req, res) => {

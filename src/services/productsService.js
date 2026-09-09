@@ -44,6 +44,8 @@ const productsService = {
       params.push(`%${searchTerm.trim()}%`);
     }
     
+    queryStr += ` ORDER BY nombre LIMIT 50`;
+    
     const result = await query(queryStr, params);
     
     return result.rows.map(row => ({
@@ -729,7 +731,8 @@ const productsService = {
     try {
       await client.query("BEGIN");
 
-      if (productoData.codigoP) {
+      // Validar código de producto único
+      if (productoData.codigoP && productoData.codigoP.trim() !== '') {
         const existingProduct = await client.query(
           "SELECT idproducto FROM productos WHERE codigop = $1 AND estado = 0",
           [productoData.codigoP.trim()]
@@ -737,6 +740,18 @@ const productsService = {
         
         if (existingProduct.rows.length > 0) {
           throw new Error(`Ya existe un producto con el código "${productoData.codigoP}"`);
+        }
+      }
+
+      // Validar código de barras único
+      if (productoData.codigo_barras && productoData.codigo_barras.trim() !== '') {
+        const existingBarcode = await client.query(
+          "SELECT idproducto FROM productos WHERE codigo_barras = $1 AND estado = 0",
+          [productoData.codigo_barras.trim()]
+        );
+        
+        if (existingBarcode.rows.length > 0) {
+          throw new Error(`Ya existe un producto con el código de barras "${productoData.codigo_barras}"`);
         }
       }
 
@@ -861,7 +876,8 @@ const productsService = {
         throw new Error("Producto no encontrado");
       }
 
-      if (productoData.codigoP) {
+      // VALIDACIÓN DE CÓDIGO DE PRODUCTO
+      if (productoData.codigoP && productoData.codigoP.trim() !== '') {
         const existingProduct = await client.query(
           "SELECT idproducto FROM productos WHERE codigop = $1 AND estado = 0 AND idproducto != $2",
           [productoData.codigoP.trim(), id]
@@ -869,6 +885,18 @@ const productsService = {
         
         if (existingProduct.rows.length > 0) {
           throw new Error(`Ya existe otro producto con el código "${productoData.codigoP}"`);
+        }
+      }
+
+      // VALIDACIÓN DE CÓDIGO DE BARRAS - CORREGIDA
+      if (productoData.codigo_barras && productoData.codigo_barras.trim() !== '') {
+        const existingBarcode = await client.query(
+          "SELECT idproducto FROM productos WHERE codigo_barras = $1 AND estado = 0 AND idproducto != $2",
+          [productoData.codigo_barras.trim(), id]
+        );
+        
+        if (existingBarcode.rows.length > 0) {
+          throw new Error(`Ya existe otro producto con el código de barras "${productoData.codigo_barras}"`);
         }
       }
 
@@ -972,7 +1000,7 @@ const productsService = {
               lote.idlote,
               id,
             ]
-          );
+          ); 
         }
 
         const lotesNuevos = productoData.lotes.filter(

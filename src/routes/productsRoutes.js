@@ -6,25 +6,80 @@ const multer = require("multer");
 const path = require("path");
 
 const storage = multer.memoryStorage();
+
+// Configuración de multer con mejor manejo de errores
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024,
+    fileSize: 5 * 1024 * 1024, // 5MB
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif/;
-    const extname = allowedTypes.test(
+    // Verificar extensión
+    const allowedExtensions = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedExtensions.test(
       path.extname(file.originalname).toLowerCase(),
     );
-    const mimetype = allowedTypes.test(file.mimetype);
+    
+    // Verificar mimetype
+    const allowedMimetypes = /image\/(jpeg|jpg|png|gif|webp)/;
+    const mimetype = allowedMimetypes.test(file.mimetype);
 
     if (mimetype && extname) {
       return cb(null, true);
     } else {
-      cb(new Error("Solo se permiten imágenes (jpeg, jpg, png, gif)"));
+      // Error con mensaje detallado
+      const error = new Error(
+        `Solo se permiten imágenes (jpeg, jpg, png, gif, webp). Archivo recibido: ${file.originalname} (${file.mimetype})`
+      );
+      error.code = "INVALID_IMAGE_TYPE";
+      return cb(error);
     }
   },
 });
+
+// Middleware para manejar errores de multer
+const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        error: `El archivo es demasiado grande. El tamaño máximo permitido es de 5MB.`,
+        code: 'FILE_TOO_LARGE'
+      });
+    }
+    if (err.code === 'LIMIT_FILE_COUNT') {
+      return res.status(400).json({
+        error: 'Demasiados archivos. Solo se permite una imagen.',
+        code: 'TOO_MANY_FILES'
+      });
+    }
+    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({
+        error: 'Campo de archivo inesperado. El campo debe llamarse "imagen".',
+        code: 'UNEXPECTED_FILE'
+      });
+    }
+    return res.status(400).json({
+      error: `Error al subir el archivo: ${err.message}`,
+      code: 'UPLOAD_ERROR'
+    });
+  }
+  
+  if (err && err.code === 'INVALID_IMAGE_TYPE') {
+    return res.status(400).json({
+      error: err.message,
+      code: 'INVALID_IMAGE_TYPE'
+    });
+  }
+  
+  if (err && err.message && err.message.includes('Solo se permiten imágenes')) {
+    return res.status(400).json({
+      error: err.message,
+      code: 'INVALID_IMAGE_TYPE'
+    });
+  }
+  
+  next(err);
+};
 
 // Rutas para opciones de selección
 router.get("/ubicaciones", productsController.getUbicaciones);
@@ -38,16 +93,35 @@ router.get("/todos-select", productsController.getTodosProductosSelect);
 router.get("/buscar", productsController.buscarProductos);
 router.get("/productos/codigo/:codigoP", productsController.getProductoByCodigoP);
 router.get("/productos/:id", productsController.getProductoById);
+
+// Rutas con upload - usando el middleware de manejo de errores
 router.post(
   "/productos",
-  upload.single("imagen"),
-  productsController.createProducto,
+  (req, res, next) => {
+    upload.single("imagen")(req, res, (err) => {
+      if (err) {
+        // Pasar el error al middleware de manejo de multer
+        return handleMulterError(err, req, res, next);
+      }
+      next();
+    });
+  },
+  productsController.createProducto
 );
+
 router.put(
   "/productos/:id",
-  upload.single("imagen"),
-  productsController.updateProducto,
+  (req, res, next) => {
+    upload.single("imagen")(req, res, (err) => {
+      if (err) {
+        return handleMulterError(err, req, res, next);
+      }
+      next();
+    });
+  },
+  productsController.updateProducto
 );
+
 router.delete("/productos/:id", productsController.deleteProducto);
 
 // Rutas para gestión de stock
