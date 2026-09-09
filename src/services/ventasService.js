@@ -265,7 +265,7 @@ const ventasService = {
       // Filtro por empleado
       if (filtros.empleado && filtros.empleado !== "Todos") {
         paramCount++;
-        whereConditions.push(`u.usuario = $${paramCount}`);
+        whereConditions.push(`v.idusuario = (SELECT idusuario FROM usuarios WHERE usuario = $${paramCount})`);
         queryParams.push(filtros.empleado);
       }
 
@@ -305,9 +305,9 @@ const ventasService = {
         whereConditions.push(`
           EXISTS (
             SELECT 1
-            FROM detalle_ventas dv
-            INNER JOIN doctores m ON dv.iddoctor = m.iddoctor
-            WHERE dv.idventa = v.idventa AND m.nombre_doctor = $${paramCount}
+            FROM detalle_ventas dv_med
+            INNER JOIN doctores m ON dv_med.iddoctor = m.iddoctor
+            WHERE dv_med.idventa = v.idventa AND m.nombre_doctor = $${paramCount}
           )
         `);
         queryParams.push(filtros.medico);
@@ -315,16 +315,27 @@ const ventasService = {
 
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
-      // ✅ CONSULTA CORREGIDA - Calcula inversión y ganancia real
+      // ✅ CONSULTA CORREGIDA - Sin duplicaciones
       const querySQL = `
+        WITH ventas_filtradas AS (
+          SELECT DISTINCT v.idventa, v.total
+          FROM ventas v
+          ${whereClause}
+        ),
+        inversion AS (
+          SELECT 
+            dv.idventa,
+            SUM(dv.cantidad * p.precio_compra) AS inversion_por_venta
+          FROM detalle_ventas dv
+          INNER JOIN productos p ON dv.idproducto = p.idproducto
+          WHERE dv.idventa IN (SELECT idventa FROM ventas_filtradas)
+          GROUP BY dv.idventa
+        )
         SELECT 
-          COALESCE(SUM(dv.cantidad * p.precio_compra), 0) AS total_invertido,
-          COALESCE(SUM(v.total), 0) AS total_general
-        FROM detalle_ventas dv
-        INNER JOIN ventas v ON dv.idventa = v.idventa
-        INNER JOIN usuarios u ON v.idusuario = u.idusuario
-        INNER JOIN productos p ON dv.idproducto = p.idproducto
-        ${whereClause}
+          COALESCE(SUM(i.inversion_por_venta), 0) AS total_invertido,
+          COALESCE(SUM(vf.total), 0) AS total_general
+        FROM ventas_filtradas vf
+        LEFT JOIN inversion i ON vf.idventa = i.idventa
       `;
 
       const result = await query(querySQL, queryParams);
@@ -335,11 +346,14 @@ const ventasService = {
       // ✅ La ganancia es el total general menos la inversión
       const gananciaReal = totalGeneral - totalInvertido;
 
+      console.log(`📊 Inversión: ${totalInvertido}, Total General: ${totalGeneral}, Ganancia: ${gananciaReal}`);
+
       return {
         total_invertido: totalInvertido,
-        total_ganado: gananciaReal  // ✅ Ganancia real = Total General - Inversión
+        total_ganado: gananciaReal
       };
     } catch (error) {
+      console.error("Error en getTotalesInversionGanancia:", error);
       throw new Error("Error al obtener totales de inversión y ganancia: " + error.message);
     }
   },
