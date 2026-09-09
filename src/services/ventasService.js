@@ -254,7 +254,7 @@ const ventasService = {
   },
 
   // ============================================
-  // GET - OBTENER TOTALES DE INVERSIÓN Y GANANCIA
+  // GET - OBTENER TOTALES DE INVERSIÓN Y GANANCIA (CORREGIDO)
   // ============================================
   getTotalesInversionGanancia: async (filtros = {}) => {
     try {
@@ -315,13 +315,11 @@ const ventasService = {
 
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
-      // Query para calcular inversión y ganancia
-      // Inversión = SUM(cantidad * precio_compra)
-      // Ganancia = SUM(cantidad * precio_venta)
+      // ✅ CONSULTA CORREGIDA - Calcula inversión y ganancia real
       const querySQL = `
         SELECT 
           COALESCE(SUM(dv.cantidad * p.precio_compra), 0) AS total_invertido,
-          COALESCE(SUM(dv.cantidad * p.precio_venta), 0) AS total_ganado
+          COALESCE(SUM(v.total), 0) AS total_general
         FROM detalle_ventas dv
         INNER JOIN ventas v ON dv.idventa = v.idventa
         INNER JOIN usuarios u ON v.idusuario = u.idusuario
@@ -330,7 +328,17 @@ const ventasService = {
       `;
 
       const result = await query(querySQL, queryParams);
-      return result.rows[0];
+      
+      const totalInvertido = parseFloat(result.rows[0].total_invertido || 0);
+      const totalGeneral = parseFloat(result.rows[0].total_general || 0);
+      
+      // ✅ La ganancia es el total general menos la inversión
+      const gananciaReal = totalGeneral - totalInvertido;
+
+      return {
+        total_invertido: totalInvertido,
+        total_ganado: gananciaReal  // ✅ Ganancia real = Total General - Inversión
+      };
     } catch (error) {
       throw new Error("Error al obtener totales de inversión y ganancia: " + error.message);
     }
