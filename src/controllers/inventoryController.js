@@ -3,15 +3,17 @@ const inventoryService = require("../services/inventoryService");
 
 const getInventory = async (req, res) => {
   try {
-    const { search, lowMarginOnly, categories } = req.query;
+    const { search, lowMarginOnly, categories, laboratories } = req.query;
     
-    // Convertir categorías y tipos a arrays si existen
+    // Convertir categorías y laboratorios a arrays si existen
     const categoryArray = categories ? categories.split(',') : [];
+    const laboratoryArray = laboratories ? laboratories.split(',') : [];
     
     const inventory = await inventoryService.getInventory(
       search, 
       lowMarginOnly === 'true',
-      categoryArray
+      categoryArray,
+      laboratoryArray
     );
     
     res.json(inventory);
@@ -50,8 +52,22 @@ const getCategories = async (req, res) => {
   }
 };
 
+const getLaboratories = async (req, res) => {
+  try {
+    const laboratories = await inventoryService.getLaboratories();
+    res.json(laboratories);
+  } catch (error) {
+    console.error("Error en getLaboratories:", error);
+    res.status(500).json({ 
+      error: "Error al obtener los laboratorios",
+      details: error.message 
+    });
+  }
+};
+
 module.exports = {
   getInventory,
   getLowMarginCount,
-  getCategories
+  getCategories,
+  getLaboratories
 };

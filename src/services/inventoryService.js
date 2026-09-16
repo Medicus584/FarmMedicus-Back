@@ -1,7 +1,7 @@
 // src/services/inventoryService.js
 const { query } = require("../../db");
 
-const getInventory = async (searchTerm = null, lowMarginOnly = false, categories = [], types = []) => {
+const getInventory = async (searchTerm = null, lowMarginOnly = false, categories = [], laboratories = []) => {
   try {
     let sqlQuery = `
       SELECT DISTINCT
@@ -13,6 +13,8 @@ const getInventory = async (searchTerm = null, lowMarginOnly = false, categories
         p.precio_venta,
         p.stock_minimo,
         p.estado,
+        p.idlaboratorio,
+        lab.nombre_laboratorio,
         COALESCE(lt.stock_total, 0) as stock,
         COALESCE(
           (SELECT MAX(fecha_hora) 
@@ -23,6 +25,7 @@ const getInventory = async (searchTerm = null, lowMarginOnly = false, categories
         ) as ultima_edicion
       FROM productos p
       LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
+      LEFT JOIN laboratorios lab ON p.idlaboratorio = lab.idlaboratorio
       LEFT JOIN LATERAL (
         SELECT 
           SUM(lo.stock) as stock_total
@@ -60,6 +63,14 @@ const getInventory = async (searchTerm = null, lowMarginOnly = false, categories
       sqlQuery += ` AND pc.idcategoria IN (${placeholders})`;
       params.push(...categories);
       paramCount += categories.length - 1;
+    }
+
+    if (laboratories && laboratories.length > 0) {
+      paramCount++;
+      const placeholders = laboratories.map((_, index) => `$${paramCount + index}`).join(',');
+      sqlQuery += ` AND p.idlaboratorio IN (${placeholders})`;
+      params.push(...laboratories);
+      paramCount += laboratories.length - 1;
     }
 
     sqlQuery += ` ORDER BY p.nombre`;
@@ -109,6 +120,25 @@ const getCategories = async () => {
   }
 };
 
+const getLaboratories = async () => {
+  try {
+    const sqlQuery = `
+      SELECT 
+        idlaboratorio as id,
+        nombre_laboratorio as nombre
+      FROM laboratorios 
+      WHERE estado = 0
+      ORDER BY nombre_laboratorio
+    `;
+
+    const result = await query(sqlQuery);
+    return result.rows;
+  } catch (error) {
+    console.error("Error en inventoryService.getLaboratories:", error);
+    throw error;
+  }
+};
+
 const getTypes = async () => {
   try {
     const sqlQuery = `
@@ -132,5 +162,6 @@ module.exports = {
   getInventory,
   getLowMarginCount,
   getCategories,
+  getLaboratories,
   getTypes
 };
