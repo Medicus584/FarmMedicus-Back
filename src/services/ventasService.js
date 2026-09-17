@@ -35,34 +35,43 @@ const ventasService = {
         queryParams.push(filtros.metodo);
       }
 
+      // ✅ CORREGIDO: Sin AT TIME ZONE porque fecha_hora ya está en hora Bolivia
       if (filtros.fechaEspecifica) {
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) = $${paramCount}`);
         queryParams.push(filtros.fechaEspecifica);
       }
 
       if (filtros.fechaInicio && filtros.fechaFin) {
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') >= $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) >= $${paramCount}`);
         queryParams.push(filtros.fechaInicio);
         
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') <= $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) <= $${paramCount}`);
         queryParams.push(filtros.fechaFin);
       }
 
       if (!filtros.fechaEspecifica && !filtros.fechaInicio) {
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = CURRENT_DATE`);
+        whereConditions.push(`DATE(v.fecha_hora) = CURRENT_DATE`);
       }
 
       if (filtros.medico && filtros.medico !== "Todos") {
         paramCount++;
-        whereConditions.push(`m.nombre_doctor = $${paramCount}`);
+        whereConditions.push(`
+          EXISTS (
+            SELECT 1
+            FROM detalle_ventas dv_med
+            INNER JOIN doctores m ON dv_med.iddoctor = m.iddoctor
+            WHERE dv_med.idventa = v.idventa AND m.nombre_doctor = $${paramCount}
+          )
+        `);
         queryParams.push(filtros.medico);
       }
 
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
+      // ✅ CORREGIDO: Sin GROUP BY innecesario, usando subconsulta para el médico
       const ventasQuery = `
         SELECT 
           v.idventa,
@@ -77,34 +86,23 @@ const ventasService = {
           u.nombres as usuario_nombre,
           u.apellidos as usuario_apellidos,
           u.usuario as usuario_usuario,
-          m.iddoctor,
-          m.nombre_doctor AS medico
+          (
+            SELECT m.nombre_doctor 
+            FROM detalle_ventas dv_med
+            INNER JOIN doctores m ON dv_med.iddoctor = m.iddoctor
+            WHERE dv_med.idventa = v.idventa
+            LIMIT 1
+          ) AS medico
         FROM ventas v
         INNER JOIN usuarios u ON v.idusuario = u.idusuario
-        LEFT JOIN detalle_ventas dv_medico ON dv_medico.idventa = v.idventa
-        LEFT JOIN doctores m ON dv_medico.iddoctor = m.iddoctor
         ${whereClause}
-        GROUP BY
-          v.idventa,
-          v.fecha_hora,
-          v.idusuario,
-          v.descripcion,
-          v.sub_total,
-          v.descuento,
-          v.descripcion_descuento,
-          v.total,
-          v.metodo_pago,
-          u.nombres,
-          u.apellidos,
-          u.usuario,
-          m.iddoctor,
-          m.nombre_doctor
-        ORDER BY v.fecha_hora DESC
+        ORDER BY v.fecha_hora DESC, v.idventa DESC
       `;
 
       const ventasResult = await query(ventasQuery, queryParams);
       const ventas = ventasResult.rows;
 
+      // Cargar detalles de cada venta
       for (const venta of ventas) {
         const detallesQuery = `
           SELECT 
@@ -121,6 +119,7 @@ const ventasService = {
           LEFT JOIN productos p ON dv.idproducto = p.idproducto
           LEFT JOIN lotes l ON dv.idlote = l.idlote
           WHERE dv.idventa = $1
+          ORDER BY dv.iddetalle_venta ASC
         `;
         
         const detallesResult = await query(detallesQuery, [venta.idventa]);
@@ -151,24 +150,25 @@ const ventasService = {
         queryParams.push(filtros.metodo);
       }
 
+      // ✅ CORREGIDO: Sin AT TIME ZONE
       if (filtros.fechaEspecifica) {
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) = $${paramCount}`);
         queryParams.push(filtros.fechaEspecifica);
       }
 
       if (filtros.fechaInicio && filtros.fechaFin) {
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') >= $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) >= $${paramCount}`);
         queryParams.push(filtros.fechaInicio);
         
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') <= $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) <= $${paramCount}`);
         queryParams.push(filtros.fechaFin);
       }
 
       if (!filtros.fechaEspecifica && !filtros.fechaInicio) {
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = CURRENT_DATE`);
+        whereConditions.push(`DATE(v.fecha_hora) = CURRENT_DATE`);
       }
 
       if (filtros.medico && filtros.medico !== "Todos") {
@@ -205,6 +205,7 @@ const ventasService = {
 
   getVentasHoyAsistente: async (username) => {
     try {
+      // ✅ CORREGIDO: Sin AT TIME ZONE
       const ventasQuery = `
         SELECT 
           v.idventa,
@@ -220,9 +221,9 @@ const ventasService = {
           u.usuario as usuario_usuario
         FROM ventas v
         INNER JOIN usuarios u ON v.idusuario = u.idusuario
-        WHERE DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = CURRENT_DATE
+        WHERE DATE(v.fecha_hora) = CURRENT_DATE
           AND u.usuario = $1
-        ORDER BY v.fecha_hora DESC
+        ORDER BY v.fecha_hora DESC, v.idventa DESC
       `;
 
       const ventasResult = await query(ventasQuery, [username]);
@@ -241,6 +242,7 @@ const ventasService = {
           FROM detalle_ventas dv
           LEFT JOIN productos p ON dv.idproducto = p.idproducto
           WHERE dv.idventa = $1
+          ORDER BY dv.iddetalle_venta ASC
         `;
         
         const detallesResult = await query(detallesQuery, [venta.idventa]);
@@ -254,7 +256,7 @@ const ventasService = {
   },
 
   // ============================================
-  // GET - OBTENER TOTALES DE INVERSIÓN Y GANANCIA (CORREGIDO)
+  // GET - OBTENER TOTALES DE INVERSIÓN Y GANANCIA
   // ============================================
   getTotalesInversionGanancia: async (filtros = {}) => {
     try {
@@ -262,44 +264,39 @@ const ventasService = {
       let queryParams = [];
       let paramCount = 0;
 
-      // Filtro por empleado
       if (filtros.empleado && filtros.empleado !== "Todos") {
         paramCount++;
         whereConditions.push(`v.idusuario = (SELECT idusuario FROM usuarios WHERE usuario = $${paramCount})`);
         queryParams.push(filtros.empleado);
       }
 
-      // Filtro por método de pago
       if (filtros.metodo && filtros.metodo !== "Todos") {
         paramCount++;
         whereConditions.push(`v.metodo_pago = $${paramCount}`);
         queryParams.push(filtros.metodo);
       }
 
-      // Filtro por fecha específica
+      // ✅ CORREGIDO: Sin AT TIME ZONE
       if (filtros.fechaEspecifica) {
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) = $${paramCount}`);
         queryParams.push(filtros.fechaEspecifica);
       }
 
-      // Filtro por rango de fechas
       if (filtros.fechaInicio && filtros.fechaFin) {
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') >= $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) >= $${paramCount}`);
         queryParams.push(filtros.fechaInicio);
         
         paramCount++;
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') <= $${paramCount}`);
+        whereConditions.push(`DATE(v.fecha_hora) <= $${paramCount}`);
         queryParams.push(filtros.fechaFin);
       }
 
-      // Si no hay filtro de fecha, usar fecha actual
       if (!filtros.fechaEspecifica && !filtros.fechaInicio) {
-        whereConditions.push(`DATE(v.fecha_hora AT TIME ZONE 'America/La_Paz') = CURRENT_DATE`);
+        whereConditions.push(`DATE(v.fecha_hora) = CURRENT_DATE`);
       }
 
-      // Filtro por médico
       if (filtros.medico && filtros.medico !== "Todos") {
         paramCount++;
         whereConditions.push(`
@@ -315,7 +312,6 @@ const ventasService = {
 
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
-      // ✅ CONSULTA CORREGIDA - Sin duplicaciones
       const querySQL = `
         WITH ventas_filtradas AS (
           SELECT DISTINCT v.idventa, v.total
@@ -342,11 +338,7 @@ const ventasService = {
       
       const totalInvertido = parseFloat(result.rows[0].total_invertido || 0);
       const totalGeneral = parseFloat(result.rows[0].total_general || 0);
-      
-      // ✅ La ganancia es el total general menos la inversión
       const gananciaReal = totalGeneral - totalInvertido;
-
-      console.log(`📊 Inversión: ${totalInvertido}, Total General: ${totalGeneral}, Ganancia: ${gananciaReal}`);
 
       return {
         total_invertido: totalInvertido,
@@ -359,11 +351,9 @@ const ventasService = {
   },
 
   // ============================================
-  // DELETE - ANULAR VENTA (CON EGRESO DE CAJA CORRECTO)
+  // DELETE - ANULAR VENTA
   // ============================================
   anularVenta: async (idVenta, usuarioId, username) => {
-    console.log("🔍 anularVenta service - id:", idVenta, "usuarioId:", usuarioId);
-
     const idNum = parseInt(idVenta);
     if (isNaN(idNum)) {
       throw new Error("ID de venta inválido");
@@ -374,23 +364,10 @@ const ventasService = {
     try {
       await client.query('BEGIN');
 
-      // ============================================
-      // 1. VERIFICAR QUE LA VENTA EXISTA
-      // ============================================
       const ventaResult = await client.query(
-        `
-        SELECT 
-          v.idventa,
-          v.idusuario,
-          v.metodo_pago,
-          v.total,
-          v.sub_total,
-          v.descuento,
-          v.fecha_hora,
-          v.descripcion
-        FROM ventas v
-        WHERE v.idventa = $1
-        `,
+        `SELECT v.idventa, v.idusuario, v.metodo_pago, v.total, v.sub_total,
+                v.descuento, v.fecha_hora, v.descripcion
+         FROM ventas v WHERE v.idventa = $1`,
         [idNum]
       );
 
@@ -402,32 +379,17 @@ const ventasService = {
       const montoTotal = parseFloat(venta.total || 0);
       const esEfectivo = venta.metodo_pago === 'Efectivo';
 
-      console.log(`💰 Venta ${idNum} - Método: ${venta.metodo_pago}, Total: ${montoTotal} Bs`);
-
-      // ============================================
-      // 2. OBTENER DETALLES DE LA VENTA (CON LOTE ORIGINAL)
-      // ============================================
       const detallesResult = await client.query(
-        `
-        SELECT 
-          dv.iddetalle_venta,
-          dv.idproducto,
-          dv.idlote,
-          dv.cantidad,
-          p.nombre as nombre_producto
-        FROM detalle_ventas dv
-        INNER JOIN productos p ON dv.idproducto = p.idproducto
-        WHERE dv.idventa = $1
-        `,
+        `SELECT dv.iddetalle_venta, dv.idproducto, dv.idlote, dv.cantidad,
+                p.nombre as nombre_producto
+         FROM detalle_ventas dv
+         INNER JOIN productos p ON dv.idproducto = p.idproducto
+         WHERE dv.idventa = $1`,
         [idNum]
       );
 
       const detalles = detallesResult.rows;
-      console.log(`📦 ${detalles.length} productos a devolver al stock`);
 
-      // ============================================
-      // 3. REPONER STOCK AL LOTE ORIGINAL
-      // ============================================
       for (const detalle of detalles) {
         if (detalle.idlote) {
           const loteResult = await client.query(
@@ -443,19 +405,11 @@ const ventasService = {
               `UPDATE lotes SET stock = $1 WHERE idlote = $2`,
               [nuevoStock, detalle.idlote]
             );
-
-            console.log(`✅ Producto ${detalle.nombre_producto}: +${detalle.cantidad} unidades (lote ${detalle.idlote})`);
           }
-        } else {
-          console.warn(`⚠️ Producto ${detalle.nombre_producto} no tiene lote asignado`);
         }
       }
 
-      // ============================================
-      // 4. SI ES EFECTIVO: REGISTRAR EGRESO EN CAJA
-      // ============================================
       if (esEfectivo) {
-        // Obtener la caja principal
         const cajaResult = await client.query(
           `SELECT idcaja, total FROM caja WHERE nombre_caja = 'Caja Principal'`
         );
@@ -467,77 +421,32 @@ const ventasService = {
         const caja = cajaResult.rows[0];
         const idCaja = caja.idcaja;
         const totalActual = parseFloat(caja.total || 0);
-        
-        // ✅ RESTAMOS el monto (EGRESO) - PERMITIMOS SALDO NEGATIVO
         const nuevoTotal = totalActual - montoTotal;
 
-        console.log(`💰 Caja: total actual ${totalActual} Bs, restando ${montoTotal} Bs = ${nuevoTotal} Bs`);
-
-        // 4a. ACTUALIZAR TOTAL DE CAJA (RESTANDO, PERMITIENDO NEGATIVOS)
         await client.query(
           `UPDATE caja SET total = $1 WHERE idcaja = $2`,
           [nuevoTotal, idCaja]
         );
 
-        // 4b. REGISTRAR EGRESO EN TRANSACCION_CAJA (SIN idventa)
         await client.query(
-          `
-          INSERT INTO transaccion_caja (
-            idcaja,
-            idusuario,
-            monto_nuevo,
-            monto_anterior,
-            monto,
-            tipo_movimiento,
-            descripcion,
-            fecha
-          )
-          VALUES (
-            $1, $2, $3, $4, $5, 'egreso', $6, TIMEZONE('America/La_Paz', NOW())
-          )
-          `,
-          [
-            idCaja,
-            usuarioId,
-            nuevoTotal,
-            totalActual,
-            montoTotal,
-            `ANULACIÓN - Devolución efectivo Venta #${idNum}`
-          ]
+          `INSERT INTO transaccion_caja (
+            idcaja, idusuario, monto_nuevo, monto_anterior, monto,
+            tipo_movimiento, descripcion, fecha
+          ) VALUES ($1, $2, $3, $4, $5, 'egreso', $6, TIMEZONE('America/La_Paz', NOW()))`,
+          [idCaja, usuarioId, nuevoTotal, totalActual, montoTotal,
+           `ANULACIÓN - Devolución efectivo Venta #${idNum}`]
         );
 
-        console.log(`✅ Registrado egreso de ${montoTotal} Bs por anulación`);
-        
-        // 4c. Desvincular transacción de ingreso de la venta (se mantiene para historial)
         await client.query(
           `UPDATE transaccion_caja SET idventa = NULL WHERE idventa = $1 AND tipo_movimiento = 'ingreso'`,
           [idNum]
         );
-        console.log(`✅ Desvinculada transacción de ingreso de la venta (se mantiene para historial)`);
       }
 
-      // ============================================
-      // 5. ELIMINAR DETALLES DE LA VENTA
-      // ============================================
-      await client.query(
-        `DELETE FROM detalle_ventas WHERE idventa = $1`,
-        [idNum]
-      );
-      console.log(`✅ Eliminados detalles de venta`);
-
-      // ============================================
-      // 6. ELIMINAR LA VENTA
-      // ============================================
-      await client.query(
-        `DELETE FROM ventas WHERE idventa = $1`,
-        [idNum]
-      );
-      console.log(`✅ Venta ${idNum} eliminada`);
+      await client.query(`DELETE FROM detalle_ventas WHERE idventa = $1`, [idNum]);
+      await client.query(`DELETE FROM ventas WHERE idventa = $1`, [idNum]);
 
       await client.query('COMMIT');
-
-      console.log(`✅ Venta #${idNum} anulada correctamente por ${username}`);
-      console.log(`💰 Monto devuelto: ${montoTotal} Bs (${venta.metodo_pago})`);
 
       return {
         success: true,
