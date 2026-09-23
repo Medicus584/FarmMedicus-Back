@@ -44,8 +44,6 @@ const productsService = {
       params.push(`%${searchTerm.trim()}%`);
     }
     
-    queryStr += ` ORDER BY nombre LIMIT 50`;
-    
     const result = await query(queryStr, params);
     
     return result.rows.map(row => ({
