@@ -318,9 +318,13 @@ const productsController = {
   addStockProducto: async (req, res) => {
     try {
       const { id } = req.params;
-      const { cantidad, fecha_vencimiento } = req.body;
+      const { cantidad, fecha_vencimiento, fecha_compra } = req.body;
       if (cantidad <= 0)
         res.status(400).json({ error: "El stock no puede ser 0 o menor" });
+
+      if (!fecha_compra) {
+        return res.status(400).json({ error: "La fecha de compra es obligatoria" });
+      }
 
       const fechaVencimientoDate = new Date(fecha_vencimiento);
       const fechaActual = new Date();
@@ -335,6 +339,7 @@ const productsController = {
         parseInt(id),
         cantidad,
         fecha_vencimiento,
+        fecha_compra,
       );
       return res.json(producto);
     } catch (error) {

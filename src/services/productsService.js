@@ -80,7 +80,8 @@ const productsService = {
             jsonb_build_object(
               'idlote', lo.idlote,
               'stock', lo.stock,
-              'fecha_vencimiento', lo.fecha_vencimiento
+              'fecha_vencimiento', lo.fecha_vencimiento,
+              'fecha_compra', lo.fecha_compra
             ) ORDER BY lo.fecha_vencimiento NULLS LAST
           ) as lotes
         FROM lotes lo
@@ -168,6 +169,7 @@ const productsService = {
         idlote: lote.idlote,
         stock: lote.stock,
         fechaVencimiento: lote.fecha_vencimiento || '',
+        fechaCompra: lote.fecha_compra || '',
       })),
       productos_similares: similaresResult.rows,
     };
@@ -224,7 +226,8 @@ const productsService = {
             jsonb_build_object(
               'idlote', lo.idlote,
               'stock', lo.stock,
-              'fecha_vencimiento', lo.fecha_vencimiento
+              'fecha_vencimiento', lo.fecha_vencimiento,
+              'fecha_compra', lo.fecha_compra
             ) ORDER BY lo.fecha_vencimiento NULLS LAST
           ) as lotes
         FROM lotes lo
@@ -313,6 +316,7 @@ const productsService = {
             idlote: lote.idlote,
             stock: lote.stock,
             fechaVencimiento: lote.fecha_vencimiento || '',
+            fechaCompra: lote.fecha_compra || '',
           })),
           productos_similares: similaresResult.rows,
         };
@@ -411,7 +415,8 @@ const productsService = {
             jsonb_build_object(
               'idlote', lo.idlote,
               'stock', lo.stock,
-              'fecha_vencimiento', lo.fecha_vencimiento
+              'fecha_vencimiento', lo.fecha_vencimiento,
+              'fecha_compra', lo.fecha_compra
             ) ORDER BY lo.fecha_vencimiento NULLS LAST
           ) as lotes
         FROM lotes lo
@@ -500,6 +505,7 @@ const productsService = {
             idlote: lote.idlote,
             stock: lote.stock,
             fechaVencimiento: lote.fecha_vencimiento || '',
+            fechaCompra: lote.fecha_compra || '',
           })),
           productos_similares: similaresResult.rows,
         };
@@ -543,7 +549,8 @@ const productsService = {
             jsonb_build_object(
               'idlote', lo.idlote,
               'stock', lo.stock,
-              'fecha_vencimiento', lo.fecha_vencimiento
+              'fecha_vencimiento', lo.fecha_vencimiento,
+              'fecha_compra', lo.fecha_compra
             ) ORDER BY lo.fecha_vencimiento NULLS LAST
           ) as lotes
         FROM lotes lo
@@ -638,6 +645,7 @@ const productsService = {
         idlote: lote.idlote,
         stock: lote.stock,
         fechaVencimiento: lote.fecha_vencimiento || '',
+        fechaCompra: lote.fecha_compra || '',
       })),
       productos_similares: similaresResult.rows,
     };
@@ -812,7 +820,7 @@ const productsService = {
         const valores = productoData.lotes
           .map(
             (_, index) =>
-              `($1, $${index * 2 + 2}, $${index * 2 + 3})`
+              `($1, $${index * 3 + 2}, $${index * 3 + 3}, $${index * 3 + 4})`
           )
           .join(", ");
 
@@ -821,6 +829,7 @@ const productsService = {
           ...productoData.lotes.flatMap((lote) => [
             lote.stock,
             lote.fecha_vencimiento || null,
+            lote.fecha_compra || null,
           ]),
         ];
 
@@ -829,7 +838,8 @@ const productsService = {
             INSERT INTO lotes (
               idproducto,
               stock,
-              fecha_vencimiento
+              fecha_vencimiento,
+              fecha_compra
             )
             VALUES ${valores}
           `,
@@ -1009,7 +1019,7 @@ const productsService = {
           const valores = lotesNuevos
             .map(
               (_, index) =>
-                `($1, $${index * 2 + 2}, $${index * 2 + 3})`
+                `($1, $${index * 3 + 2}, $${index * 3 + 3}, $${index * 3 + 4})`
             )
             .join(", ");
 
@@ -1018,6 +1028,7 @@ const productsService = {
             ...lotesNuevos.flatMap((lote) => [
               lote.stock,
               lote.fecha_vencimiento || null,
+              lote.fecha_compra || null,
             ]),
           ];
 
@@ -1026,7 +1037,8 @@ const productsService = {
               INSERT INTO lotes (
                 idproducto,
                 stock,
-                fecha_vencimiento
+                fecha_vencimiento,
+                fecha_compra
               )
               VALUES ${valores}
             `,
@@ -1091,14 +1103,14 @@ const productsService = {
     return result.rows[0];
   },
   
-  addStockProducto: async (idproducto, cantidad, fecha_vencimiento) => {
+  addStockProducto: async (idproducto, cantidad, fecha_vencimiento, fecha_compra) => {
     const result = await query(
       `
-        INSERT INTO public.lotes(idproducto, stock, fecha_vencimiento)
-        VALUES ($1, $2, $3)
+        INSERT INTO public.lotes(idproducto, stock, fecha_vencimiento, fecha_compra)
+        VALUES ($1, $2, $3, $4)
         RETURNING *;
       `,
-      [idproducto, cantidad, fecha_vencimiento],
+      [idproducto, cantidad, fecha_vencimiento, fecha_compra],
     );
 
     if (result.rows.length === 0) {
