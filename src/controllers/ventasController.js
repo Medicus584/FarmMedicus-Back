@@ -12,9 +12,20 @@ const ventasController = {
     }
   },
 
+  // ✅ NUEVO - Obtener productos para filtro
+  getProductosVentas: async (req, res) => {
+    try {
+      const productos = await ventasService.getProductosVentas();
+      res.json(productos);
+    } catch (error) {
+      console.error("Error en getProductosVentas:", error);
+      res.status(500).json({ error: error.message });
+    }
+  },
+
   getVentas: async (req, res) => {
     try {
-      const { empleado, metodo, fechaEspecifica, fechaInicio, fechaFin, medico } = req.query;
+      const { empleado, metodo, fechaEspecifica, fechaInicio, fechaFin, medico, producto } = req.query;
       
       const ventas = await ventasService.getVentas({
         empleado,
@@ -23,6 +34,7 @@ const ventasController = {
         fechaInicio,
         fechaFin,
         medico,
+        producto,
       });
       
       res.json(ventas);
@@ -34,7 +46,7 @@ const ventasController = {
 
   getTotalesVentas: async (req, res) => {
     try {
-      const { empleado, metodo, fechaEspecifica, fechaInicio, fechaFin, medico } = req.query;
+      const { empleado, metodo, fechaEspecifica, fechaInicio, fechaFin, medico, producto } = req.query;
       
       const totales = await ventasService.getTotalesVentas({
         empleado,
@@ -43,6 +55,7 @@ const ventasController = {
         fechaInicio,
         fechaFin,
         medico,
+        producto,
       });
       
       res.json(totales);
@@ -63,12 +76,9 @@ const ventasController = {
     }
   },
 
-  // ============================================
-  // GET - TOTALES INVERSIÓN Y GANANCIA
-  // ============================================
   getTotalesInversionGanancia: async (req, res) => {
     try {
-      const { empleado, metodo, fechaEspecifica, fechaInicio, fechaFin, medico } = req.query;
+      const { empleado, metodo, fechaEspecifica, fechaInicio, fechaFin, medico, producto } = req.query;
       
       const totales = await ventasService.getTotalesInversionGanancia({
         empleado,
@@ -77,6 +87,7 @@ const ventasController = {
         fechaInicio,
         fechaFin,
         medico,
+        producto,
       });
       
       res.json(totales);
@@ -86,13 +97,10 @@ const ventasController = {
     }
   },
 
-  // ============================================
-  // DELETE - ANULAR VENTA
-  // ============================================
   anularVenta: async (req, res) => {
     try {
       const { id } = req.params;
-      const usuarioId = req.user?.idusuario || 1; // Obtener del token o sesión
+      const usuarioId = req.user?.idusuario || 1;
       const username = req.user?.usuario || "Sistema";
 
       if (!id || isNaN(Number(id))) {

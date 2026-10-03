@@ -17,6 +17,22 @@ const ventasService = {
     }
   },
 
+  // ✅ NUEVA FUNCIÓN - Obtener productos para filtro
+  getProductosVentas: async () => {
+    try {
+      const result = await query(
+        `SELECT DISTINCT p.idproducto, p.nombre 
+         FROM productos p
+         INNER JOIN detalle_ventas dv ON p.idproducto = dv.idproducto
+         WHERE p.estado = 0
+         ORDER BY p.nombre ASC`
+      );
+      return result.rows;
+    } catch (error) {
+      throw new Error("Error al obtener productos: " + error.message);
+    }
+  },
+
   getVentas: async (filtros = {}) => {
     try {
       let whereConditions = [];
@@ -69,9 +85,22 @@ const ventasService = {
         queryParams.push(filtros.medico);
       }
 
+      // ✅ NUEVO: Filtro por producto
+      if (filtros.producto && filtros.producto !== "Todos") {
+        paramCount++;
+        whereConditions.push(`
+          EXISTS (
+            SELECT 1
+            FROM detalle_ventas dv_prod
+            INNER JOIN productos p_prod ON dv_prod.idproducto = p_prod.idproducto
+            WHERE dv_prod.idventa = v.idventa AND p_prod.nombre = $${paramCount}
+          )
+        `);
+        queryParams.push(filtros.producto);
+      }
+
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
-      // ✅ CORREGIDO: Sin GROUP BY innecesario, usando subconsulta para el médico
       const ventasQuery = `
         SELECT 
           v.idventa,
@@ -102,7 +131,6 @@ const ventasService = {
       const ventasResult = await query(ventasQuery, queryParams);
       const ventas = ventasResult.rows;
 
-      // Cargar detalles de cada venta
       for (const venta of ventas) {
         const detallesQuery = `
           SELECT 
@@ -150,7 +178,6 @@ const ventasService = {
         queryParams.push(filtros.metodo);
       }
 
-      // ✅ CORREGIDO: Sin AT TIME ZONE
       if (filtros.fechaEspecifica) {
         paramCount++;
         whereConditions.push(`DATE(v.fecha_hora) = $${paramCount}`);
@@ -184,6 +211,20 @@ const ventasService = {
         queryParams.push(filtros.medico);
       }
 
+      // ✅ NUEVO: Filtro por producto
+      if (filtros.producto && filtros.producto !== "Todos") {
+        paramCount++;
+        whereConditions.push(`
+          EXISTS (
+            SELECT 1
+            FROM detalle_ventas dv_prod
+            INNER JOIN productos p_prod ON dv_prod.idproducto = p_prod.idproducto
+            WHERE dv_prod.idventa = v.idventa AND p_prod.nombre = $${paramCount}
+          )
+        `);
+        queryParams.push(filtros.producto);
+      }
+
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
 
       const totalesQuery = `
@@ -205,7 +246,6 @@ const ventasService = {
 
   getVentasHoyAsistente: async (username) => {
     try {
-      // ✅ CORREGIDO: Sin AT TIME ZONE
       const ventasQuery = `
         SELECT 
           v.idventa,
@@ -255,9 +295,6 @@ const ventasService = {
     }
   },
 
-  // ============================================
-  // GET - OBTENER TOTALES DE INVERSIÓN Y GANANCIA
-  // ============================================
   getTotalesInversionGanancia: async (filtros = {}) => {
     try {
       let whereConditions = [];
@@ -276,7 +313,6 @@ const ventasService = {
         queryParams.push(filtros.metodo);
       }
 
-      // ✅ CORREGIDO: Sin AT TIME ZONE
       if (filtros.fechaEspecifica) {
         paramCount++;
         whereConditions.push(`DATE(v.fecha_hora) = $${paramCount}`);
@@ -308,6 +344,20 @@ const ventasService = {
           )
         `);
         queryParams.push(filtros.medico);
+      }
+
+      // ✅ NUEVO: Filtro por producto
+      if (filtros.producto && filtros.producto !== "Todos") {
+        paramCount++;
+        whereConditions.push(`
+          EXISTS (
+            SELECT 1
+            FROM detalle_ventas dv_prod
+            INNER JOIN productos p_prod ON dv_prod.idproducto = p_prod.idproducto
+            WHERE dv_prod.idventa = v.idventa AND p_prod.nombre = $${paramCount}
+          )
+        `);
+        queryParams.push(filtros.producto);
       }
 
       const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(" AND ")}` : "";
@@ -350,9 +400,6 @@ const ventasService = {
     }
   },
 
-  // ============================================
-  // DELETE - ANULAR VENTA
-  // ============================================
   anularVenta: async (idVenta, usuarioId, username) => {
     const idNum = parseInt(idVenta);
     if (isNaN(idNum)) {
