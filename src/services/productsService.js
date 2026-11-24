@@ -1,6 +1,32 @@
 // src/services/productsService.js
 const { query, pool } = require("../../db");
 
+const resolverCategorias = async (client, categorias) => {
+  const recibidos = (categorias || []).map((c) => parseInt(c, 10));
+
+  const invalidos = recibidos.filter((c) => !Number.isInteger(c) || c <= 0);
+  if (invalidos.length > 0) {
+    throw new Error(
+      "Hay categorías no válidas en el formulario. Vuelve a seleccionarlas de la lista.",
+    );
+  }
+
+  const ids = [...new Set(recibidos)];
+  if (ids.length === 0) return [];
+
+  const { rows } = await client.query(
+    "SELECT idcategoria FROM categorias WHERE idcategoria = ANY($1::int[]) AND estado = 0",
+    [ids],
+  );
+
+  const faltantes = ids.filter((id) => !rows.some((r) => r.idcategoria === id));
+  if (faltantes.length > 0) {
+    throw new Error(`Categorías no válidas: ${faltantes.join(", ")}`);
+  }
+
+  return ids;
+};
+
 const productsService = {
   // Obtener opciones de selección
   getUbicaciones: async () => {
@@ -70,7 +96,7 @@ const productsService = {
       FROM productos p
       LEFT JOIN ubicaciones u ON p.idubicacion = u.idubicacion
       LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
-      LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria
+      LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria AND c.estado = 0
       LEFT JOIN laboratorios l ON p.idlaboratorio = l.idlaboratorio
       LEFT JOIN forma_farmaceutica ff ON p.idforma_farmaceutica = ff.idforma_farmaceutica
       LEFT JOIN LATERAL (
@@ -214,7 +240,7 @@ const productsService = {
       FROM productos p
       LEFT JOIN ubicaciones u ON p.idubicacion = u.idubicacion
       LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
-      LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria
+      LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria AND c.estado = 0
       LEFT JOIN producto_tipos pt ON p.idproducto = pt.idproducto
       LEFT JOIN tipos tp ON pt.idtipo = tp.idtipo
       LEFT JOIN laboratorios l ON p.idlaboratorio = l.idlaboratorio
@@ -405,7 +431,7 @@ const productsService = {
       FROM productos p
       LEFT JOIN ubicaciones u ON p.idubicacion = u.idubicacion
       LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
-      LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria
+      LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria AND c.estado = 0
       LEFT JOIN laboratorios l ON p.idlaboratorio = l.idlaboratorio
       LEFT JOIN forma_farmaceutica ff ON p.idforma_farmaceutica = ff.idforma_farmaceutica
       LEFT JOIN LATERAL (
@@ -530,14 +556,14 @@ const productsService = {
         u.idubicacion,
         l.nombre_laboratorio as laboratorio_nombre,
         ff.nombre_forma as forma_farmaceutica_nombre,
-        ARRAY_AGG(DISTINCT c.nombre) as categorias,
+        ARRAY_AGG(DISTINCT c.nombre) FILTER (WHERE c.nombre IS NOT NULL) as categorias,
         ARRAY_AGG(DISTINCT tp.nombre) as tipos,
         COALESCE(lt.stock_total, 0) as stock_total,
         COALESCE(lt.lotes, '[]'::jsonb) as lotes
       FROM productos p
       LEFT JOIN ubicaciones u ON p.idubicacion = u.idubicacion
       LEFT JOIN producto_categorias pc ON p.idproducto = pc.idproducto
-      LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria
+      LEFT JOIN categorias c ON pc.idcategoria = c.idcategoria AND c.estado = 0
       LEFT JOIN producto_tipos pt ON p.idproducto = pt.idproducto
       LEFT JOIN tipos tp ON pt.idtipo = tp.idtipo
       LEFT JOIN laboratorios l ON p.idlaboratorio = l.idlaboratorio
@@ -795,13 +821,15 @@ const productsService = {
 
       const producto = productoResult.rows[0];
 
-      if (productoData.categorias && productoData.categorias.length > 0) {
-        for (const idcategoria of productoData.categorias) {
-          await client.query(
-            "INSERT INTO producto_categorias (idproducto, idcategoria) VALUES ($1, $2)",
-            [producto.idproducto, idcategoria],
-          );
-        }
+      const categoriasCreate = await resolverCategorias(
+        client,
+        productoData.categorias,
+      );
+      for (const idcategoria of categoriasCreate) {
+        await client.query(
+          "INSERT INTO producto_categorias (idproducto, idcategoria) VALUES ($1, $2)",
+          [producto.idproducto, idcategoria],
+        );
       }
 
       if (productoData.lotes && productoData.lotes.length > 0) {
@@ -960,13 +988,15 @@ const productsService = {
         "DELETE FROM producto_categorias WHERE idproducto = $1",
         [id],
       );
-      if (productoData.categorias && productoData.categorias.length > 0) {
-        for (const idcategoria of productoData.categorias) {
-          await client.query(
-            "INSERT INTO producto_categorias (idproducto, idcategoria) VALUES ($1, $2)",
-            [id, idcategoria],
-          );
-        }
+      const categoriasUpdate = await resolverCategorias(
+        client,
+        productoData.categorias,
+      );
+      for (const idcategoria of categoriasUpdate) {
+        await client.query(
+          "INSERT INTO producto_categorias (idproducto, idcategoria) VALUES ($1, $2)",
+          [id, idcategoria],
+        );
       }
 
       await client.query(

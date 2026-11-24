@@ -202,6 +202,13 @@ const productsController = {
           code: "INVALID_DATE"
         });
       }
+
+      if (error.message.includes("categorías no válidas") || error.message.includes("Categorías no válidas")) {
+        return res.status(400).json({
+          error: error.message,
+          code: "INVALID_CATEGORY"
+        });
+      }
       
       if (error.message.includes("Solo se permiten imágenes")) {
         return res.status(400).json({
@@ -271,6 +278,13 @@ const productsController = {
         return res.status(400).json({
           error: error.message,
           code: "INVALID_DATE"
+        });
+      }
+
+      if (error.message.includes("categorías no válidas") || error.message.includes("Categorías no válidas")) {
+        return res.status(400).json({
+          error: error.message,
+          code: "INVALID_CATEGORY"
         });
       }
       
